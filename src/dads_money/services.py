@@ -27,11 +27,13 @@ class MoneyService:
         self.storage.close()
     
     # Account operations
-    def create_account(self, name: str, account_type, opening_balance: float = 0.0) -> Account:
+    def create_account(self, name: str, account_type, opening_balance: float = 0.0, 
+                      savings_subtype=None) -> Account:
         """Create a new account."""
         account = Account(
             name=name,
             account_type=account_type,
+            savings_subtype=savings_subtype,
             opening_balance=opening_balance,
             current_balance=opening_balance
         )

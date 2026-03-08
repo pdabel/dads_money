@@ -19,6 +19,14 @@ class AccountType(Enum):
     LIABILITY = "Liability"
 
 
+class SavingsAccountType(Enum):
+    """Types of savings accounts."""
+    STANDARD = "Standard Savings"
+    HIGH_INTEREST = "High Interest Savings"
+    CASH_ISA = "Cash ISA"
+    STOCKS_SHARES_ISA = "Stocks and Shares ISA"
+
+
 class TransactionStatus(Enum):
     """Transaction reconciliation status."""
     CLEARED = "c"  # Cleared
@@ -52,6 +60,7 @@ class Account:
     id: str = field(default_factory=lambda: str(uuid4()))
     name: str = ""
     account_type: AccountType = AccountType.CHECKING
+    savings_subtype: Optional[SavingsAccountType] = None
     opening_balance: Decimal = Decimal("0.00")
     current_balance: Decimal = Decimal("0.00")
     description: str = ""

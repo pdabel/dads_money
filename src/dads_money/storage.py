@@ -8,7 +8,7 @@ from pathlib import Path
 from typing import List, Optional
 
 from .models import (
-    Account, AccountType, Category, Split, Transaction, TransactionStatus
+    Account, AccountType, SavingsAccountType, Category, Split, Transaction, TransactionStatus
 )
 
 
@@ -27,6 +27,7 @@ class Storage:
         self.conn = sqlite3.connect(str(self.db_path))
         self.conn.row_factory = sqlite3.Row
         self._create_tables()
+        self._migrate_schema()
     
     def _create_tables(self):
         """Create database schema."""
@@ -38,6 +39,7 @@ class Storage:
                 id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 account_type TEXT NOT NULL,
+                savings_subtype TEXT,
                 opening_balance TEXT NOT NULL,
                 current_balance TEXT NOT NULL,
                 description TEXT,
@@ -105,6 +107,19 @@ class Storage:
         self.conn.commit()
         self._seed_default_categories()
     
+    def _migrate_schema(self):
+        """Migrate database schema to latest version."""
+        cursor = self.conn.cursor()
+        
+        # Check if savings_subtype column exists in accounts table
+        cursor.execute("PRAGMA table_info(accounts)")
+        columns = [row[1] for row in cursor.fetchall()]
+        
+        if "savings_subtype" not in columns:
+            # Add savings_subtype column
+            cursor.execute("ALTER TABLE accounts ADD COLUMN savings_subtype TEXT")
+            self.conn.commit()
+    
     def _seed_default_categories(self):
         """Create default categories if none exist."""
         cursor = self.conn.cursor()
@@ -145,13 +160,19 @@ class Storage:
     def save_account(self, account: Account):
         """Save or update an account."""
         cursor = self.conn.cursor()
+        
+        # Handle savings_subtype
+        savings_subtype_value = None
+        if account.savings_subtype:
+            savings_subtype_value = account.savings_subtype.value
+        
         cursor.execute("""
             INSERT OR REPLACE INTO accounts
-            (id, name, account_type, opening_balance, current_balance, description,
+            (id, name, account_type, savings_subtype, opening_balance, current_balance, description,
              account_number, institution, created_date, closed)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """, (
-            account.id, account.name, account.account_type.value,
+            account.id, account.name, account.account_type.value, savings_subtype_value,
             str(account.opening_balance), str(account.current_balance),
             account.description, account.account_number, account.institution,
             account.created_date.isoformat(), int(account.closed)
@@ -188,10 +209,20 @@ class Storage:
         if account_type_value == "Checking":
             account_type_value = AccountType.CHECKING.value
 
+        # Handle savings_subtype
+        savings_subtype = None
+        if row["savings_subtype"]:
+            try:
+                savings_subtype = SavingsAccountType(row["savings_subtype"])
+            except ValueError:
+                # If the saved value is not valid, default to None
+                savings_subtype = None
+
         return Account(
             id=row["id"],
             name=row["name"],
             account_type=AccountType(account_type_value),
+            savings_subtype=savings_subtype,
             opening_balance=Decimal(row["opening_balance"]),
             current_balance=Decimal(row["current_balance"]),
             description=row["description"] or "",

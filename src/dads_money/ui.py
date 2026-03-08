@@ -7,7 +7,7 @@ from pathlib import Path
 from typing import Optional
 
 from PySide6.QtCore import Qt, QDate
-from PySide6.QtGui import QAction, QFont
+from PySide6.QtGui import QAction, QFont, QColor
 from PySide6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QListWidget, QListWidgetItem, QTableWidget, QTableWidgetItem, QPushButton, QLabel,
@@ -17,7 +17,7 @@ from PySide6.QtWidgets import (
 )
 
 from .config import Config
-from .models import Account, AccountType, Transaction, TransactionStatus, Category
+from .models import Account, AccountType, SavingsAccountType, Transaction, TransactionStatus, Category
 from .services import MoneyService
 from .settings import get_settings, CURRENCIES
 
@@ -324,8 +324,13 @@ class MainWindow(QMainWindow):
         selected_index = -1
 
         for index, account in enumerate(accounts):
+            # Determine account type display
+            account_type_display = account.account_type.value
+            if account.account_type == AccountType.SAVINGS and account.savings_subtype:
+                account_type_display = account.savings_subtype.value
+            
             balance_str = self.settings.format_currency(account.current_balance)
-            item = QListWidgetItem(f"{account.name} - {balance_str}")
+            item = QListWidgetItem(f"{account.name} ({account_type_display}) - {balance_str}")
             item.setData(Qt.UserRole, account.id)
             self.account_list.addItem(item)
             if account.id == selected_account_id:
@@ -361,8 +366,13 @@ class MainWindow(QMainWindow):
         if not self.current_account:
             return
         
+        # Build account type display string
+        account_type_display = self.current_account.account_type.value
+        if self.current_account.account_type == AccountType.SAVINGS and self.current_account.savings_subtype:
+            account_type_display = self.current_account.savings_subtype.value
+        
         self.account_header.setText(
-            f"{self.current_account.name} - {self.current_account.account_type.value}"
+            f"{self.current_account.name} - {account_type_display}"
         )
         balance_formatted = self.settings.format_currency(self.current_account.current_balance)
         self.balance_label.setText(
@@ -410,10 +420,14 @@ class MainWindow(QMainWindow):
 
             credit_item = QTableWidgetItem(credit_text)
             credit_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            if credit_text:  # Only set color if there's a value
+                credit_item.setForeground(QColor(0, 128, 0))  # Dark green for credits
             self.transaction_table.setItem(i, 5, credit_item)
 
             debit_item = QTableWidgetItem(debit_text)
             debit_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            if debit_text:  # Only set color if there's a value
+                debit_item.setForeground(QColor(200, 0, 0))  # Red for debits
             self.transaction_table.setItem(i, 6, debit_item)
 
             running_balance += trans.amount
@@ -433,6 +447,7 @@ class MainWindow(QMainWindow):
             account = self.service.create_account(
                 name=account_data['name'],
                 account_type=account_data['type'],
+                savings_subtype=account_data.get('savings_subtype'),
                 opening_balance=account_data['opening_balance']
             )
             self.load_accounts(account.id)
@@ -449,6 +464,7 @@ class MainWindow(QMainWindow):
             account_data = dialog.get_data()
             self.current_account.name = account_data['name']
             self.current_account.account_type = account_data['type']
+            self.current_account.savings_subtype = account_data.get('savings_subtype')
             self.current_account.opening_balance = account_data['opening_balance']
             self.service.update_account(self.current_account)
             self.load_accounts(self.current_account.id)
@@ -761,7 +777,18 @@ class AccountDialog(QDialog):
         if self.account:
             index = self.type_combo.findData(self.account.account_type)
             self.type_combo.setCurrentIndex(index)
+        self.type_combo.currentIndexChanged.connect(self._on_account_type_changed)
         layout.addRow("Account Type:", self.type_combo)
+        
+        # Savings Subtype (shown only for savings accounts)
+        self.subtype_label = QLabel("Savings Type:")
+        self.subtype_combo = QComboBox()
+        for subtype in SavingsAccountType:
+            self.subtype_combo.addItem(subtype.value, subtype)
+        if self.account and self.account.savings_subtype:
+            index = self.subtype_combo.findData(self.account.savings_subtype)
+            self.subtype_combo.setCurrentIndex(index)
+        layout.addRow(self.subtype_label, self.subtype_combo)
         
         # Opening balance
         self.balance_spin = QDoubleSpinBox()
@@ -780,12 +807,26 @@ class AccountDialog(QDialog):
         layout.addRow(buttons)
         
         self.setLayout(layout)
+        
+        # Set initial visibility
+        self._on_account_type_changed()
+    
+    def _on_account_type_changed(self):
+        """Show/hide savings subtype based on account type."""
+        is_savings = self.type_combo.currentData() == AccountType.SAVINGS
+        self.subtype_label.setVisible(is_savings)
+        self.subtype_combo.setVisible(is_savings)
     
     def get_data(self):
         """Get dialog data."""
+        savings_subtype = None
+        if self.type_combo.currentData() == AccountType.SAVINGS:
+            savings_subtype = self.subtype_combo.currentData()
+        
         return {
             'name': self.name_edit.text(),
             'type': self.type_combo.currentData(),
+            'savings_subtype': savings_subtype,
             'opening_balance': Decimal(str(self.balance_spin.value()))
         }
 
