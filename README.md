@@ -2,6 +2,13 @@
 
 A Microsoft Money 3.0 compatible personal finance application for macOS (and other platforms).
 
+## AI Attribution
+
+This project was created wholly with AI-assisted development.
+
+Primary model used:
+- GitHub Copilot using GPT-5.3-Codex
+
 ## Quick Start
 
 ### Running the Application
@@ -203,4 +210,15 @@ black src/
 
 ## License
 
+This project uses the MIT License.
+
+MIT was chosen because it is simple, widely understood, and permissive:
+- Easy for individuals and families to use, modify, and share
+- Suitable for hobby and educational projects without restrictive terms
+- Encourages community contributions and reuse while keeping attribution
+
+See [LICENSE](LICENSE) for the full license text.
+
 MIT License
+
+Copyright (c) 2026 Dad's Money contributors
