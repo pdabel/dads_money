@@ -6,7 +6,6 @@ from typing import Optional
 
 from .config import Config
 
-
 # Common currency symbols
 CURRENCIES = {
     "USD": {"symbol": "$", "name": "US Dollar", "decimal_places": 2},
