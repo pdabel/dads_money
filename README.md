@@ -188,12 +188,38 @@ Build a distributable .app bundle that runs without Python installed:
 source venv/bin/activate
 pip install -e ".[dev]"
 
-# Run tests
-pytest
+# Set up pre-commit hooks (runs automatically on git commit)
+pre-commit install
 
-# Format code
-black src/
+# Run pre-commit on all files manually
+pre-commit run --all-files
+
+# Or use make commands
+make pre-commit-install  # Install hooks
+make pre-commit-run      # Run on all files
+make test                # Run tests
+make format              # Format code with Black
+make check               # Run linting and format checks
 ```
+
+### Pre-commit Hooks
+
+Pre-commit hooks automatically run before each `git commit` to catch issues early:
+- **Formatting**: Auto-fixes trailing whitespace, end-of-file issues, and Black formatting
+- **Validation**: Checks YAML/TOML syntax, detects debug statements
+- **Quality**: Prevents large file commits and merge conflicts
+
+**Important**: If pre-commit auto-fixes files, you'll need to `git add` them again and re-run `git commit`.
+
+### CI/CD
+
+GitHub Actions runs comprehensive checks on every push:
+- Tests on Python 3.10, 3.11, 3.12
+- Tests on Ubuntu and macOS
+- Type checking with mypy
+- Code formatting validation with Black
+- Coverage reporting
+- macOS app building
 
 ## Compatibility Notes
 
