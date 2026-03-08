@@ -209,7 +209,7 @@ class TestSettingsPersistence:
             # Create settings in temp directory
             settings1 = Settings()
             original_dir = settings1.settings_file.parent
-            
+
             settings1.currency_code = "EUR"
             settings1.save()
 

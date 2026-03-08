@@ -144,10 +144,10 @@ PSmall Amount
     def test_qif_whitespace_handling(self) -> None:
         """Test QIF with extra whitespace."""
         qif_content = """!Type:Bank
-D1/1/2024  
-T  100.00  
-P  Test Payee  
-M  Test Memo  
+D1/1/2024
+T  100.00
+P  Test Payee
+M  Test Memo
 ^
 """
         with NamedTemporaryFile(mode="w", suffix=".qif", delete=False) as f:
@@ -213,9 +213,7 @@ PCafé René
 MMémo with accent
 ^
 """
-        with NamedTemporaryFile(
-            mode="w", suffix=".qif", delete=False, encoding="utf-8"
-        ) as f:
+        with NamedTemporaryFile(mode="w", suffix=".qif", delete=False, encoding="utf-8") as f:
             f.write(qif_content)
             temp_file = Path(f.name)
 
@@ -304,9 +302,7 @@ M{long_memo}
                 amount=Decimal("50.00"),
                 memo="Weekly shopping",
             ),
-            Transaction(
-                payee="Salary", amount=Decimal("2000.00"), memo="Monthly salary"
-            ),
+            Transaction(payee="Salary", amount=Decimal("2000.00"), memo="Monthly salary"),
         ]
 
         with NamedTemporaryFile(suffix=".qif", delete=False) as f:

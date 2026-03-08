@@ -10,6 +10,7 @@ from uuid import uuid4
 
 class AccountType(Enum):
     """Account types supported by Microsoft Money."""
+
     CHECKING = "Current Account"
     SAVINGS = "Savings"
     CREDIT_CARD = "Credit Card"
@@ -21,6 +22,7 @@ class AccountType(Enum):
 
 class SavingsAccountType(Enum):
     """Types of savings accounts."""
+
     STANDARD = "Standard Savings"
     HIGH_INTEREST = "High Interest Savings"
     CASH_ISA = "Cash ISA"
@@ -29,6 +31,7 @@ class SavingsAccountType(Enum):
 
 class TransactionStatus(Enum):
     """Transaction reconciliation status."""
+
     CLEARED = "c"  # Cleared
     RECONCILED = "R"  # Reconciled
     UNCLEARED = ""  # Not cleared
@@ -37,13 +40,14 @@ class TransactionStatus(Enum):
 @dataclass
 class Category:
     """Expense/income category."""
+
     id: str = field(default_factory=lambda: str(uuid4()))
     name: str = ""
     parent_id: Optional[str] = None
     is_income: bool = False
     is_tax_related: bool = False
     description: str = ""
-    
+
     def full_name(self, categories_dict: dict = None) -> str:
         """Get full category name including parent (e.g., 'Auto:Gas')."""
         if not self.parent_id or not categories_dict:
@@ -57,6 +61,7 @@ class Category:
 @dataclass
 class Account:
     """Financial account."""
+
     id: str = field(default_factory=lambda: str(uuid4()))
     name: str = ""
     account_type: AccountType = AccountType.CHECKING
@@ -68,7 +73,7 @@ class Account:
     institution: str = ""
     created_date: Date = field(default_factory=Date.today)
     closed: bool = False
-    
+
     def __post_init__(self):
         """Ensure balance is Decimal."""
         if not isinstance(self.opening_balance, Decimal):
@@ -80,12 +85,13 @@ class Account:
 @dataclass
 class Split:
     """Transaction split line item."""
+
     id: str = field(default_factory=lambda: str(uuid4()))
     category_id: Optional[str] = None
     transfer_account_id: Optional[str] = None  # For transfers between accounts
     amount: Decimal = Decimal("0.00")
     memo: str = ""
-    
+
     def __post_init__(self):
         """Ensure amount is Decimal."""
         if not isinstance(self.amount, Decimal):
@@ -95,6 +101,7 @@ class Split:
 @dataclass
 class Transaction:
     """Financial transaction."""
+
     id: str = field(default_factory=lambda: str(uuid4()))
     account_id: str = ""
     date: Date = field(default_factory=Date.today)
@@ -103,24 +110,24 @@ class Transaction:
     amount: Decimal = Decimal("0.00")
     status: TransactionStatus = TransactionStatus.UNCLEARED
     check_number: str = ""
-    
+
     # Category or splits
     category_id: Optional[str] = None
     transfer_account_id: Optional[str] = None
     splits: List[Split] = field(default_factory=list)
-    
+
     created_date: DateTime = field(default_factory=DateTime.now)
     modified_date: DateTime = field(default_factory=DateTime.now)
-    
+
     def __post_init__(self):
         """Ensure amount is Decimal."""
         if not isinstance(self.amount, Decimal):
             self.amount = Decimal(str(self.amount))
-    
+
     def is_split(self) -> bool:
         """Check if transaction has splits."""
         return len(self.splits) > 0
-    
+
     def validate_splits(self) -> bool:
         """Validate that split amounts sum to transaction amount."""
         if not self.is_split():

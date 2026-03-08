@@ -11,7 +11,7 @@ Guidelines for agents implementing features or making changes to the DadsMoney c
 def create_account(self, name: str, account_type: str, currency: str) -> Account:
 ```
 
-**Naming Conventions (MUST)**: 
+**Naming Conventions (MUST)**:
 - Classes: PascalCase (`QIFParser`, `MainWindow`, `MoneyService`)
 - Functions/methods: snake_case (`parse_file()`, `create_account()`)
 - Constants: UPPER_SNAKE_CASE (`DEFAULT_SETTINGS`, `REGISTER_COLUMNS`)
@@ -110,10 +110,10 @@ def get_account(self, account_id: int) -> Account | None:
 ```
 1. RED:   Write test that fails
    pytest tests/test_storage.py::TestAccountStorage::test_save_and_retrieve_account
-   
+
 2. GREEN: Implement code to pass test
    Edit src/dads_money/storage.py → save_account()
-   
+
 3. REFACTOR: Clean up code while keeping test passing
    make format && make test
 ```

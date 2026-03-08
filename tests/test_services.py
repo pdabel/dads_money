@@ -77,9 +77,7 @@ class TestAccountServices:
         """Test updating an account via service."""
         service = MoneyService(temp_db)
         try:
-            account = service.create_account(
-                "Original Name", AccountType.CHECKING, 1000.0
-            )
+            account = service.create_account("Original Name", AccountType.CHECKING, 1000.0)
 
             account.name = "Updated Name"
             account.current_balance = Decimal("1500.0")
@@ -249,9 +247,7 @@ class TestTransactionServices:
             account = service.create_account("Test", AccountType.CHECKING)
 
             # Default status should be UNCLEARED
-            txn = service.create_transaction(
-                account_id=account.id, date=date.today(), amount=10.0
-            )
+            txn = service.create_transaction(account_id=account.id, date=date.today(), amount=10.0)
             assert txn.status == TransactionStatus.UNCLEARED
 
             # Set specific status

@@ -59,7 +59,7 @@ INSTALLATION STEPS
    • RIGHT-CLICK on "DadsMoney.app"
    • Select "Open" from the menu
    • Click "Open" in the security warning dialog
-   
+
    This only needs to be done ONCE!
 
 3. FUTURE LAUNCHES
@@ -74,7 +74,7 @@ If you're comfortable with Terminal:
 
 1. Open Terminal
 2. Run this command:
-   
+
    xattr -cr /Applications/DadsMoney.app
 
 3. Double-click to launch normally
@@ -139,10 +139,10 @@ echo ""
 # Create DMG if create-dmg is available
 if command -v create-dmg &> /dev/null; then
     echo "💿 Creating DMG installer..."
-    
+
     # Remove old DMG if exists
     rm -f dist/DadsMoney-Installer.dmg
-    
+
     create-dmg \
         --volname "Dads Money Installer" \
         --volicon "dist/DadsMoney.app/Contents/Resources/icon-windowed.icns" \
@@ -161,12 +161,12 @@ if command -v create-dmg &> /dev/null; then
             echo "⚠️  Fancy DMG creation failed, creating basic DMG..."
             hdiutil create -volname "Dads Money" -srcfolder dist/DadsMoney.app -ov -format UDZO dist/DadsMoney-Installer.dmg
         }
-    
+
     # Copy installation instructions to a temporary folder for DMG
     mkdir -p dist/dmg_temp
     cp dist/DadsMoney.app dist/dmg_temp/
     cp dist/INSTALLATION_INSTRUCTIONS.txt dist/dmg_temp/
-    
+
     echo "✅ DMG created: dist/DadsMoney-Installer.dmg"
 else
     echo "ℹ️  create-dmg not found. To create fancy DMG:"

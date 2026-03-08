@@ -63,9 +63,7 @@ class TestCompleteWorkflow:
         service = MoneyService(temp_db)
         try:
             # Create account
-            account = service.create_account(
-                name="Test Account", account_type=AccountType.CHECKING
-            )
+            account = service.create_account(name="Test Account", account_type=AccountType.CHECKING)
 
             # Create QIF content
             qif_content = """!Type:Bank
@@ -80,9 +78,7 @@ PBonus
 MQuarterly bonus
 ^
 """
-            with NamedTemporaryFile(
-                mode="w", suffix=".qif", delete=False, newline=""
-            ) as f:
+            with NamedTemporaryFile(mode="w", suffix=".qif", delete=False, newline="") as f:
                 f.write(qif_content)
                 qif_file = Path(f.name)
 
@@ -107,18 +103,14 @@ MQuarterly bonus
         service = MoneyService(temp_db)
         try:
             # Create account
-            account = service.create_account(
-                name="Test Account", account_type=AccountType.CHECKING
-            )
+            account = service.create_account(name="Test Account", account_type=AccountType.CHECKING)
 
             # Create CSV content
             csv_content = """Date,Payee,Amount,Memo
 2024-03-15,-50.00,Grocery Store,Weekly shopping
 2024-03-16,150.00,Bonus,Quarterly bonus
 """
-            with NamedTemporaryFile(
-                mode="w", suffix=".csv", delete=False, newline=""
-            ) as f:
+            with NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="") as f:
                 f.write(csv_content)
                 csv_file = Path(f.name)
 
@@ -144,16 +136,12 @@ MQuarterly bonus
         finally:
             service.close()
 
-    def test_multiple_accounts_with_transfers_concept(
-        self, temp_db: Path
-    ) -> None:
+    def test_multiple_accounts_with_transfers_concept(self, temp_db: Path) -> None:
         """Test managing multiple accounts."""
         service = MoneyService(temp_db)
         try:
             # Create multiple accounts
-            checking = service.create_account(
-                "Checking", AccountType.CHECKING, 1000.0
-            )
+            checking = service.create_account("Checking", AccountType.CHECKING, 1000.0)
             savings = service.create_account("Savings", AccountType.SAVINGS, 5000.0)
 
             # Add transactions to both
@@ -196,14 +184,10 @@ MQuarterly bonus
 
             # Create subcategories
             gas = service.create_category("Gas", is_income=False, parent_id=auto.id)
-            insurance = service.create_category(
-                "Insurance", is_income=False, parent_id=auto.id
-            )
+            insurance = service.create_category("Insurance", is_income=False, parent_id=auto.id)
 
             # Create account and transactions
-            account = service.create_account(
-                "Test", AccountType.CHECKING, opening_balance=1000.0
-            )
+            account = service.create_account("Test", AccountType.CHECKING, opening_balance=1000.0)
 
             service.create_transaction(
                 account_id=account.id,
@@ -225,14 +209,10 @@ MQuarterly bonus
             transactions = service.get_transactions_for_account(account.id)
             assert len(transactions) >= 2
 
-            gas_txn = next(
-                (t for t in transactions if t.category_id == gas.id), None
-            )
+            gas_txn = next((t for t in transactions if t.category_id == gas.id), None)
             assert gas_txn is not None
 
-            insurance_txn = next(
-                (t for t in transactions if t.category_id == insurance.id), None
-            )
+            insurance_txn = next((t for t in transactions if t.category_id == insurance.id), None)
             assert insurance_txn is not None
         finally:
             service.close()
@@ -241,9 +221,7 @@ MQuarterly bonus
         """Test complete transaction lifecycle: create → update → retrieve."""
         service = MoneyService(temp_db)
         try:
-            account = service.create_account(
-                "Test", AccountType.CHECKING, opening_balance=1000.0
-            )
+            account = service.create_account("Test", AccountType.CHECKING, opening_balance=1000.0)
 
             # Create
             txn = service.create_transaction(

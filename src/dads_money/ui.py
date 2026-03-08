@@ -9,23 +9,50 @@ from typing import Optional
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QAction, QFont, QColor
 from PySide6.QtWidgets import (
-    QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QListWidget, QListWidgetItem, QTableWidget, QTableWidgetItem, QPushButton, QLabel,
-    QSplitter, QDialog, QLineEdit, QComboBox, QDateEdit, QTextEdit,
-    QFileDialog, QMessageBox, QHeaderView, QDialogButtonBox, QFormLayout,
-    QDoubleSpinBox, QCheckBox
+    QApplication,
+    QMainWindow,
+    QWidget,
+    QVBoxLayout,
+    QHBoxLayout,
+    QListWidget,
+    QListWidgetItem,
+    QTableWidget,
+    QTableWidgetItem,
+    QPushButton,
+    QLabel,
+    QSplitter,
+    QDialog,
+    QLineEdit,
+    QComboBox,
+    QDateEdit,
+    QTextEdit,
+    QFileDialog,
+    QMessageBox,
+    QHeaderView,
+    QDialogButtonBox,
+    QFormLayout,
+    QDoubleSpinBox,
+    QCheckBox,
 )
 
 from .config import Config
-from .models import Account, AccountType, SavingsAccountType, Transaction, TransactionStatus, Category
+from .models import (
+    Account,
+    AccountType,
+    SavingsAccountType,
+    Transaction,
+    TransactionStatus,
+    Category,
+)
 from .services import MoneyService
 from .settings import get_settings, CURRENCIES
 
 
 class MainWindow(QMainWindow):
     """Main application window with Money 3.0 style interface."""
+
     REGISTER_COLUMNS = ["Date", "Payee", "Memo", "Status", "Credit", "Debit", "Balance"]
-    
+
     def __init__(self, db_path: Optional[Path] = None):
         super().__init__()
         self.settings = get_settings()
@@ -36,101 +63,101 @@ class MainWindow(QMainWindow):
         self.load_accounts()
         self._add_to_recent_databases(self.current_db_path)
         self._update_window_title()
-    
+
     def init_ui(self):
         """Initialize the user interface."""
         self.setGeometry(100, 100, 1200, 700)
-        
+
         # Create menu bar
         self.create_menus()
-        
+
         # Create toolbar
         self.create_toolbar()
-        
+
         # Create main widget with splitter
         central = QWidget()
         main_layout = QHBoxLayout()
-        
+
         # Create splitter for accounts and register
         splitter = QSplitter(Qt.Horizontal)
-        
+
         # Left panel - Account list
         left_panel = self.create_account_panel()
         splitter.addWidget(left_panel)
-        
+
         # Right panel - Register
         right_panel = self.create_register_panel()
         splitter.addWidget(right_panel)
-        
+
         splitter.setStretchFactor(0, 1)
         splitter.setStretchFactor(1, 3)
-        
+
         main_layout.addWidget(splitter)
         central.setLayout(main_layout)
         self.setCentralWidget(central)
-        
+
         # Status bar
         self.statusBar().showMessage("Ready")
-    
+
     def create_menus(self):
         """Create menu bar."""
         menubar = self.menuBar()
-        
+
         # File menu
         file_menu = menubar.addMenu("&File")
-        
+
         new_db_action = QAction("&New Database...", self)
         new_db_action.triggered.connect(self.new_database)
         file_menu.addAction(new_db_action)
-        
+
         open_db_action = QAction("&Open Database...", self)
         open_db_action.triggered.connect(self.open_database)
         file_menu.addAction(open_db_action)
-        
+
         self.recent_menu = file_menu.addMenu("Recent &Databases")
         self._update_recent_databases_menu()
-        
+
         file_menu.addSeparator()
-        
+
         new_account_action = QAction("&New Account...", self)
         new_account_action.triggered.connect(self.new_account)
         file_menu.addAction(new_account_action)
-        
+
         file_menu.addSeparator()
-        
+
         import_action = QAction("&Import...", self)
         import_action.triggered.connect(self.import_transactions)
         file_menu.addAction(import_action)
-        
+
         export_action = QAction("&Export...", self)
         export_action.triggered.connect(self.export_transactions)
         file_menu.addAction(export_action)
-        
+
         file_menu.addSeparator()
-        
+
         exit_action = QAction("E&xit", self)
         exit_action.triggered.connect(self.close)
         file_menu.addAction(exit_action)
-        
+
         # Edit menu
         edit_menu = menubar.addMenu("&Edit")
-        
+
         new_trans_action = QAction("New &Transaction", self)
         new_trans_action.triggered.connect(self.new_transaction)
         edit_menu.addAction(new_trans_action)
-        
+
         edit_menu.addSeparator()
-        
+
         categories_action = QAction("&Categories...", self)
         categories_action.triggered.connect(self.manage_categories)
         edit_menu.addAction(categories_action)
-        
+
         payees_action = QAction("&Payees...", self)
         payees_action.triggered.connect(self.manage_payees)
         edit_menu.addAction(payees_action)
-        
+
         edit_menu.addSeparator()
-        
+
         settings_action = QAction("&Settings...", self)
         settings_action.triggered.connect(self.show_settings)
         edit_menu.addAction(settings_action)
@@ -140,41 +167,41 @@ class MainWindow(QMainWindow):
         columns_action = QAction("Register &Columns...", self)
         columns_action.triggered.connect(self.choose_register_columns)
         view_menu.addAction(columns_action)
-        
+
         # Help menu
         help_menu = menubar.addMenu("&Help")
         about_action = QAction("&About", self)
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
-    
+
     def create_toolbar(self):
         """Create toolbar."""
         toolbar = self.addToolBar("Main")
         toolbar.setMovable(False)
-        
+
         new_account_btn = QPushButton("New Account")
         new_account_btn.clicked.connect(self.new_account)
         toolbar.addWidget(new_account_btn)
-        
+
         new_trans_btn = QPushButton("New Transaction")
         new_trans_btn.clicked.connect(self.new_transaction)
         toolbar.addWidget(new_trans_btn)
-        
+
         toolbar.addSeparator()
-        
+
         import_btn = QPushButton("Import")
         import_btn.clicked.connect(self.import_transactions)
         toolbar.addWidget(import_btn)
-        
+
         export_btn = QPushButton("Export")
         export_btn.clicked.connect(self.export_transactions)
         toolbar.addWidget(export_btn)
-    
+
     def create_account_panel(self) -> QWidget:
         """Create the account list panel."""
         panel = QWidget()
         layout = QVBoxLayout()
-        
+
         # Title
         title = QLabel("Accounts")
         title_font = QFont()
@@ -182,12 +209,12 @@ class MainWindow(QMainWindow):
         title_font.setPointSize(12)
         title.setFont(title_font)
         layout.addWidget(title)
-        
+
         # Account list
         self.account_list = QListWidget()
         self.account_list.currentRowChanged.connect(self.account_selected)
         layout.addWidget(self.account_list)
-        
+
         # Buttons
         btn_layout = QHBoxLayout()
         new_btn = QPushButton("New")
@@ -197,15 +224,15 @@ class MainWindow(QMainWindow):
         btn_layout.addWidget(new_btn)
         btn_layout.addWidget(edit_btn)
         layout.addLayout(btn_layout)
-        
+
         panel.setLayout(layout)
         return panel
-    
+
     def create_register_panel(self) -> QWidget:
         """Create the transaction register panel."""
         panel = QWidget()
         layout = QVBoxLayout()
-        
+
         # Account info header
         self.account_header = QLabel("Select an account")
         header_font = QFont()
@@ -213,11 +240,11 @@ class MainWindow(QMainWindow):
         header_font.setPointSize(11)
         self.account_header.setFont(header_font)
         layout.addWidget(self.account_header)
-        
+
         # Balance display
         self.balance_label = QLabel("")
         layout.addWidget(self.balance_label)
-        
+
         # Transaction table
         self.transaction_table = QTableWidget()
         self.transaction_table.setColumnCount(len(self.REGISTER_COLUMNS))
@@ -228,7 +255,7 @@ class MainWindow(QMainWindow):
         self.transaction_table.doubleClicked.connect(self.edit_transaction)
         self.apply_register_column_visibility()
         layout.addWidget(self.transaction_table)
-        
+
         # Buttons
         btn_layout = QHBoxLayout()
         new_btn = QPushButton("New Transaction")
@@ -242,7 +269,7 @@ class MainWindow(QMainWindow):
         btn_layout.addWidget(delete_btn)
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
-        
+
         panel.setLayout(layout)
         return panel
 
@@ -275,7 +302,9 @@ class MainWindow(QMainWindow):
             visible_columns = set(default_visible)
 
         for column_index in range(len(self.REGISTER_COLUMNS)):
-            self.transaction_table.setColumnHidden(column_index, column_index not in visible_columns)
+            self.transaction_table.setColumnHidden(
+                column_index, column_index not in visible_columns
+            )
 
     def choose_register_columns(self):
         """Allow user to choose which register columns are visible."""
@@ -297,12 +326,13 @@ class MainWindow(QMainWindow):
 
         def save_columns():
             visible_columns = [
-                index for index, checkbox in enumerate(checkboxes)
-                if checkbox.isChecked()
+                index for index, checkbox in enumerate(checkboxes) if checkbox.isChecked()
             ]
 
             if not visible_columns:
-                QMessageBox.warning(dialog, "No Columns Selected", "Please select at least one column.")
+                QMessageBox.warning(
+                    dialog, "No Columns Selected", "Please select at least one column."
+                )
                 return
 
             self.settings.set("register_visible_columns", visible_columns)
@@ -327,7 +357,7 @@ class MainWindow(QMainWindow):
 
         dialog.setLayout(layout)
         dialog.exec()
-    
+
     def load_accounts(self, selected_account_id: Optional[str] = None):
         """Load accounts into the list."""
         if selected_account_id is None and self.current_account:
@@ -342,19 +372,19 @@ class MainWindow(QMainWindow):
             account_type_display = account.account_type.value
             if account.account_type == AccountType.SAVINGS and account.savings_subtype:
                 account_type_display = account.savings_subtype.value
-            
+
             balance_str = self.settings.format_currency(account.current_balance)
             item = QListWidgetItem(f"{account.name} ({account_type_display}) - {balance_str}")
             item.setData(Qt.UserRole, account.id)
             self.account_list.addItem(item)
             if account.id == selected_account_id:
                 selected_index = index
-        
+
         if accounts:
             self.account_list.setCurrentRow(selected_index if selected_index >= 0 else 0)
         else:
             self.current_account = None
-    
+
     def account_selected(self, index):
         """Handle account selection."""
         if index < 0:
@@ -374,29 +404,28 @@ class MainWindow(QMainWindow):
 
         self.current_account = account
         self.load_transactions()
-    
+
     def load_transactions(self):
         """Load transactions for current account."""
         if not self.current_account:
             return
-        
+
         # Build account type display string
         account_type_display = self.current_account.account_type.value
-        if self.current_account.account_type == AccountType.SAVINGS and self.current_account.savings_subtype:
+        if (
+            self.current_account.account_type == AccountType.SAVINGS
+            and self.current_account.savings_subtype
+        ):
             account_type_display = self.current_account.savings_subtype.value
-        
-        self.account_header.setText(
-            f"{self.current_account.name} - {account_type_display}"
-        )
+
+        self.account_header.setText(f"{self.current_account.name} - {account_type_display}")
         balance_formatted = self.settings.format_currency(self.current_account.current_balance)
-        self.balance_label.setText(
-            f"Current Balance: {balance_formatted}"
-        )
-        
+        self.balance_label.setText(f"Current Balance: {balance_formatted}")
+
         transactions = self.service.get_transactions_for_account(self.current_account.id)
         transactions = sorted(transactions, key=lambda t: (t.date, t.created_date))
         running_balance = self.current_account.opening_balance
-        
+
         self.transaction_table.setRowCount(len(transactions) + 1)
 
         opening_date = self.current_account.created_date.strftime(self.settings.date_format)
@@ -415,7 +444,7 @@ class MainWindow(QMainWindow):
             self.transaction_table.setItem(i, 0, QTableWidgetItem(date_formatted))
             self.transaction_table.setItem(i, 1, QTableWidgetItem(trans.payee))
             self.transaction_table.setItem(i, 2, QTableWidgetItem(trans.memo))
-            
+
             status_text = ""
             if trans.status == TransactionStatus.RECONCILED:
                 status_text = "R"
@@ -447,175 +476,182 @@ class MainWindow(QMainWindow):
             balance_item = QTableWidgetItem(balance_formatted)
             balance_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             self.transaction_table.setItem(i, 6, balance_item)
-            
+
             # Store transaction ID in first column for reference
             self.transaction_table.item(i, 0).setData(Qt.UserRole, trans.id)
-    
+
     def new_account(self):
         """Create a new account."""
         dialog = AccountDialog(self)
         if dialog.exec() == QDialog.Accepted:
             account_data = dialog.get_data()
             account = self.service.create_account(
-                name=account_data['name'],
-                account_type=account_data['type'],
-                savings_subtype=account_data.get('savings_subtype'),
-                opening_balance=account_data['opening_balance']
+                name=account_data["name"],
+                account_type=account_data["type"],
+                savings_subtype=account_data.get("savings_subtype"),
+                opening_balance=account_data["opening_balance"],
             )
             self.load_accounts(account.id)
             self.statusBar().showMessage(f"Account '{account_data['name']}' created")
-    
+
     def edit_account(self):
         """Edit the selected account."""
         if not self.current_account:
             QMessageBox.warning(self, "No Account", "Please select an account to edit.")
             return
-        
+
         dialog = AccountDialog(self, self.current_account)
         if dialog.exec() == QDialog.Accepted:
             account_data = dialog.get_data()
-            self.current_account.name = account_data['name']
-            self.current_account.account_type = account_data['type']
-            self.current_account.savings_subtype = account_data.get('savings_subtype')
-            self.current_account.opening_balance = account_data['opening_balance']
+            self.current_account.name = account_data["name"]
+            self.current_account.account_type = account_data["type"]
+            self.current_account.savings_subtype = account_data.get("savings_subtype")
+            self.current_account.opening_balance = account_data["opening_balance"]
             self.service.update_account(self.current_account)
             self.load_accounts(self.current_account.id)
             self.statusBar().showMessage(f"Account '{account_data['name']}' updated")
-    
+
     def new_transaction(self):
         """Create a new transaction."""
         if not self.current_account:
             QMessageBox.warning(self, "No Account", "Please select an account first.")
             return
-        
+
         dialog = TransactionDialog(self, self.service, self.current_account)
         if dialog.exec() == QDialog.Accepted:
             trans_data = dialog.get_data()
             trans = Transaction(
                 account_id=self.current_account.id,
-                date=trans_data['date'],
-                payee=trans_data['payee'],
-                memo=trans_data['memo'],
-                amount=trans_data['amount'],
-                status=trans_data['status']
+                date=trans_data["date"],
+                payee=trans_data["payee"],
+                memo=trans_data["memo"],
+                amount=trans_data["amount"],
+                status=trans_data["status"],
             )
             self.service.update_transaction(trans)
             self.load_accounts(self.current_account.id)  # Refresh balance and keep selection
             self.statusBar().showMessage("Transaction created")
-    
+
     def edit_transaction(self):
         """Edit the selected transaction."""
         row = self.transaction_table.currentRow()
         if row < 0:
             return
-        
+
         trans_id = self.transaction_table.item(row, 0).data(Qt.UserRole)
         transaction = self.service.get_transaction(trans_id)
-        
+
         if transaction:
             dialog = TransactionDialog(self, self.service, self.current_account, transaction)
             if dialog.exec() == QDialog.Accepted:
                 trans_data = dialog.get_data()
-                transaction.date = trans_data['date']
-                transaction.payee = trans_data['payee']
-                transaction.memo = trans_data['memo']
-                transaction.amount = trans_data['amount']
-                transaction.status = trans_data['status']
+                transaction.date = trans_data["date"]
+                transaction.payee = trans_data["payee"]
+                transaction.memo = trans_data["memo"]
+                transaction.amount = trans_data["amount"]
+                transaction.status = trans_data["status"]
                 self.service.update_transaction(transaction)
                 self.load_accounts(self.current_account.id)
                 self.statusBar().showMessage("Transaction updated")
-    
+
     def delete_transaction(self):
         """Delete the selected transaction."""
         row = self.transaction_table.currentRow()
         if row < 0:
             QMessageBox.warning(self, "No Selection", "Please select a transaction to delete.")
             return
-        
+
         reply = QMessageBox.question(
-            self, "Confirm Delete",
+            self,
+            "Confirm Delete",
             "Are you sure you want to delete this transaction?",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.Yes | QMessageBox.No,
         )
-        
+
         if reply == QMessageBox.Yes:
             trans_id = self.transaction_table.item(row, 0).data(Qt.UserRole)
             self.service.delete_transaction(trans_id, self.current_account.id)
             self.load_accounts(self.current_account.id)
             self.statusBar().showMessage("Transaction deleted")
-    
+
     def import_transactions(self):
         """Import transactions from file."""
         if not self.current_account:
             QMessageBox.warning(self, "No Account", "Please select an account first.")
             return
-        
+
         file_path, filter_type = QFileDialog.getOpenFileName(
-            self, "Import Transactions",
+            self,
+            "Import Transactions",
             str(Path.home()),
-            "QIF Files (*.qif);;CSV Files (*.csv);;OFX Files (*.ofx);;All Files (*.*)"
+            "QIF Files (*.qif);;CSV Files (*.csv);;OFX Files (*.ofx);;All Files (*.*)",
         )
-        
+
         if not file_path:
             return
-        
+
         try:
             count = 0
-            if file_path.endswith('.qif'):
+            if file_path.endswith(".qif"):
                 count = self.service.import_qif(file_path, self.current_account.id)
-            elif file_path.endswith('.csv'):
+            elif file_path.endswith(".csv"):
                 count = self.service.import_csv(file_path, self.current_account.id)
-            elif file_path.endswith('.ofx'):
+            elif file_path.endswith(".ofx"):
                 count = self.service.import_ofx(file_path, self.current_account.id)
             else:
-                QMessageBox.warning(self, "Unknown Format", "Please select a QIF, CSV, or OFX file.")
+                QMessageBox.warning(
+                    self, "Unknown Format", "Please select a QIF, CSV, or OFX file."
+                )
                 return
-            
+
             self.load_accounts(self.current_account.id)
             QMessageBox.information(self, "Import Complete", f"Imported {count} transactions.")
             self.statusBar().showMessage(f"Imported {count} transactions")
         except Exception as e:
             QMessageBox.critical(self, "Import Error", f"Error importing file:\n{str(e)}")
-    
+
     def export_transactions(self):
         """Export transactions to file."""
         if not self.current_account:
             QMessageBox.warning(self, "No Account", "Please select an account first.")
             return
-        
+
         file_path, filter_type = QFileDialog.getSaveFileName(
-            self, "Export Transactions",
+            self,
+            "Export Transactions",
             str(Path.home() / f"{self.current_account.name}.qif"),
-            "QIF Files (*.qif);;CSV Files (*.csv);;All Files (*.*)"
+            "QIF Files (*.qif);;CSV Files (*.csv);;All Files (*.*)",
         )
-        
+
         if not file_path:
             return
-        
+
         try:
-            if file_path.endswith('.qif'):
+            if file_path.endswith(".qif"):
                 self.service.export_qif(file_path, self.current_account.id)
-            elif file_path.endswith('.csv'):
+            elif file_path.endswith(".csv"):
                 self.service.export_csv(file_path, self.current_account.id)
             else:
                 QMessageBox.warning(self, "Unknown Format", "Please use .qif or .csv extension.")
                 return
-            
-            QMessageBox.information(self, "Export Complete", f"Transactions exported to {file_path}")
+
+            QMessageBox.information(
+                self, "Export Complete", f"Transactions exported to {file_path}"
+            )
             self.statusBar().showMessage("Export complete")
         except Exception as e:
             QMessageBox.critical(self, "Export Error", f"Error exporting file:\n{str(e)}")
-    
+
     def manage_categories(self):
         """Open category management dialog."""
         dialog = CategoryDialog(self, self.service)
         dialog.exec()
-    
+
     def manage_payees(self):
         """Open payee management dialog."""
         dialog = PayeeDialog(self, self.service)
         dialog.exec()
-    
+
     def show_settings(self):
         """Open settings dialog."""
         dialog = SettingsDialog(self, self.settings)
@@ -623,7 +659,7 @@ class MainWindow(QMainWindow):
             self.settings.save()
             # Refresh display with new currency
             self.load_accounts(self.current_account.id if self.current_account else None)
-    
+
     def show_about(self):
         """Show about dialog."""
         QMessageBox.about(
@@ -631,14 +667,14 @@ class MainWindow(QMainWindow):
             f"About {Config.APP_NAME}",
             f"{Config.APP_NAME} v{Config.APP_VERSION}\n\n"
             "A Microsoft Money 3.0 compatible personal finance application.\n\n"
-            "Supports QIF, OFX, and CSV import/export."
+            "Supports QIF, OFX, and CSV import/export.",
         )
-    
+
     def closeEvent(self, event):
         """Handle window close."""
         self.service.close()
         event.accept()
-    
+
     def _update_window_title(self):
         """Update window title to show current database."""
         db_name = self.current_db_path.name
@@ -653,38 +689,38 @@ class MainWindow(QMainWindow):
                 self.setWindowTitle(f"{Config.APP_NAME} - ~/{rel_path}")
             except ValueError:
                 self.setWindowTitle(f"{Config.APP_NAME} - {self.current_db_path}")
-    
+
     def _add_to_recent_databases(self, db_path: Path):
         """Add database to recent list."""
         recent = self.settings.get("recent_databases", [])
         if not isinstance(recent, list):
             recent = []
-        
+
         db_str = str(db_path.resolve())
         if db_str in recent:
             recent.remove(db_str)
         recent.insert(0, db_str)
         recent = recent[:10]  # Keep only 10 most recent
-        
+
         self.settings.set("recent_databases", recent)
         self.settings.save()
-    
+
     def _update_recent_databases_menu(self):
         """Update the recent databases menu."""
         self.recent_menu.clear()
         recent = self.settings.get("recent_databases", [])
-        
+
         if not recent:
             no_recent = QAction("(No recent databases)", self)
             no_recent.setEnabled(False)
             self.recent_menu.addAction(no_recent)
             return
-        
+
         for db_path_str in recent:
             db_path = Path(db_path_str)
             if not db_path.exists():
                 continue
-            
+
             # Create display name
             if db_path.parent == Config.get_user_data_dir():
                 display_name = db_path.name
@@ -694,97 +730,102 @@ class MainWindow(QMainWindow):
                     display_name = f"~/{rel_path}"
                 except ValueError:
                     display_name = str(db_path)
-            
+
             action = QAction(display_name, self)
             action.setData(db_path_str)
-            action.triggered.connect(lambda checked, p=db_path_str: self._open_database_path(Path(p)))
+            action.triggered.connect(
+                lambda checked, p=db_path_str: self._open_database_path(Path(p))
+            )
             self.recent_menu.addAction(action)
-    
+
     def new_database(self):
         """Create a new database file."""
         file_path, _ = QFileDialog.getSaveFileName(
-            self, "New Database",
+            self,
+            "New Database",
             str(Path.home() / "accounts.db"),
-            "Database Files (*.db);;All Files (*.*)"
+            "Database Files (*.db);;All Files (*.*)",
         )
-        
+
         if not file_path:
             return
-        
+
         db_path = Path(file_path)
-        
+
         # Check if file exists
         if db_path.exists():
             reply = QMessageBox.question(
-                self, "File Exists",
+                self,
+                "File Exists",
                 f"Database file already exists. Open it instead?",
-                QMessageBox.Yes | QMessageBox.No
+                QMessageBox.Yes | QMessageBox.No,
             )
             if reply == QMessageBox.Yes:
                 self._open_database_path(db_path)
             return
-        
+
         # Create new database by opening it
         self._open_database_path(db_path)
         self.statusBar().showMessage(f"Created new database: {db_path.name}")
-    
+
     def open_database(self):
         """Open an existing database file."""
         file_path, _ = QFileDialog.getOpenFileName(
-            self, "Open Database",
+            self,
+            "Open Database",
             str(Config.get_user_data_dir()),
-            "Database Files (*.db);;All Files (*.*)"
+            "Database Files (*.db);;All Files (*.*)",
         )
-        
+
         if not file_path:
             return
-        
+
         self._open_database_path(Path(file_path))
-    
+
     def _open_database_path(self, db_path: Path):
         """Open a database at the given path."""
         if not db_path.exists():
             # Will be created by Storage
             pass
-        
+
         # Close current service
         self.service.close()
-        
+
         # Open new database
         self.current_db_path = db_path
         self.service = MoneyService(self.current_db_path)
         self.current_account = None
-        
+
         # Reload UI
         self.load_accounts()
         self._add_to_recent_databases(db_path)
         self._update_recent_databases_menu()
         self._update_window_title()
-        
+
         self.statusBar().showMessage(f"Opened database: {db_path.name}")
 
 
 class AccountDialog(QDialog):
     """Dialog for creating/editing accounts."""
-    
+
     def __init__(self, parent, account: Optional[Account] = None):
         super().__init__(parent)
         self.account = account
         self.init_ui()
-    
+
     def init_ui(self):
         """Initialize dialog UI."""
-        self.setWindowTitle("Account" if not self .account else "Edit Account")
+        self.setWindowTitle("Account" if not self.account else "Edit Account")
         self.setModal(True)
-        
+
         layout = QFormLayout()
-        
+
         # Name
         self.name_edit = QLineEdit()
         if self.account:
             self.name_edit.setText(self.account.name)
         layout.addRow("Account Name:", self.name_edit)
-        
+
         # Type
         self.type_combo = QComboBox()
         for acc_type in AccountType:
@@ -794,7 +835,7 @@ class AccountDialog(QDialog):
             self.type_combo.setCurrentIndex(index)
         self.type_combo.currentIndexChanged.connect(self._on_account_type_changed)
         layout.addRow("Account Type:", self.type_combo)
-        
+
         # Savings Subtype (shown only for savings accounts)
         self.subtype_label = QLabel("Savings Type:")
         self.subtype_combo = QComboBox()
@@ -804,7 +845,7 @@ class AccountDialog(QDialog):
             index = self.subtype_combo.findData(self.account.savings_subtype)
             self.subtype_combo.setCurrentIndex(index)
         layout.addRow(self.subtype_label, self.subtype_combo)
-        
+
         # Opening balance
         self.balance_spin = QDoubleSpinBox()
         self.balance_spin.setRange(-1000000, 1000000)
@@ -814,65 +855,74 @@ class AccountDialog(QDialog):
         if self.account:
             self.balance_spin.setValue(float(self.account.opening_balance))
         layout.addRow("Opening Balance:", self.balance_spin)
-        
+
         # Buttons
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
-        
+
         self.setLayout(layout)
-        
+
         # Set initial visibility
         self._on_account_type_changed()
-    
+
     def _on_account_type_changed(self):
         """Show/hide savings subtype based on account type."""
         is_savings = self.type_combo.currentData() == AccountType.SAVINGS
         self.subtype_label.setVisible(is_savings)
         self.subtype_combo.setVisible(is_savings)
-    
+
     def get_data(self):
         """Get dialog data."""
         savings_subtype = None
         if self.type_combo.currentData() == AccountType.SAVINGS:
             savings_subtype = self.subtype_combo.currentData()
-        
+
         return {
-            'name': self.name_edit.text(),
-            'type': self.type_combo.currentData(),
-            'savings_subtype': savings_subtype,
-            'opening_balance': Decimal(str(self.balance_spin.value()))
+            "name": self.name_edit.text(),
+            "type": self.type_combo.currentData(),
+            "savings_subtype": savings_subtype,
+            "opening_balance": Decimal(str(self.balance_spin.value())),
         }
 
 
 class TransactionDialog(QDialog):
     """Dialog for creating/editing transactions."""
-    
-    def __init__(self, parent, service: MoneyService, account: Account, 
-                 transaction: Optional[Transaction] = None):
+
+    def __init__(
+        self,
+        parent,
+        service: MoneyService,
+        account: Account,
+        transaction: Optional[Transaction] = None,
+    ):
         super().__init__(parent)
         self.service = service
         self.account = account
         self.transaction = transaction
         self.init_ui()
-    
+
     def init_ui(self):
         """Initialize dialog UI."""
         self.setWindowTitle("New Transaction" if not self.transaction else "Edit Transaction")
         self.setModal(True)
         self.setMinimumWidth(400)
-        
+
         layout = QFormLayout()
-        
+
         # Date
         self.date_edit = QDateEdit()
         self.date_edit.setCalendarPopup(True)
         self.date_edit.setDisplayFormat("MM/dd/yyyy")
         if self.transaction:
-            self.date_edit.setDate(QDate(self.transaction.date.year, 
-                                         self.transaction.date.month, 
-                                         self.transaction.date.day))
+            self.date_edit.setDate(
+                QDate(
+                    self.transaction.date.year,
+                    self.transaction.date.month,
+                    self.transaction.date.day,
+                )
+            )
         else:
             self.date_edit.setDate(QDate.currentDate())
         layout.addRow("Date:", self.date_edit)
@@ -881,37 +931,37 @@ class TransactionDialog(QDialog):
         self.type_combo = QComboBox()
         self.type_combo.addItem("Deposit", "deposit")
         self.type_combo.addItem("Payment", "payment")
-        
+
         # Add savings-specific transaction types
         if self.account.account_type == AccountType.SAVINGS:
             self.type_combo.addItem("Interest", "interest")
             if self.account.savings_subtype == SavingsAccountType.STOCKS_SHARES_ISA:
                 self.type_combo.addItem("Dividend", "dividend")
-        
+
         if self.transaction and self.transaction.amount >= 0:
             self.type_combo.setCurrentIndex(0)
         else:
             self.type_combo.setCurrentIndex(1)
-        
+
         # Connect signal to update payee when type changes
         self.type_combo.currentIndexChanged.connect(self._on_transaction_type_changed)
-        
+
         layout.addRow("Type:", self.type_combo)
-        
+
         # Payee - editable combo box with predefined and historical payees
         self.payee_combo = QComboBox()
         self.payee_combo.setEditable(True)
         self.payee_combo.setInsertPolicy(QComboBox.NoInsert)
-        
+
         # Load all payees (predefined + historical from transactions)
         all_payees = self.service.get_all_payees()
         self.payee_combo.addItems(all_payees)
-        
+
         if self.transaction:
             self.payee_combo.setEditText(self.transaction.payee)
-        
+
         layout.addRow("Payee:", self.payee_combo)
-        
+
         # Amount
         self.amount_spin = QDoubleSpinBox()
         self.amount_spin.setRange(0.01, 1000000)
@@ -923,7 +973,7 @@ class TransactionDialog(QDialog):
         else:
             self.amount_spin.setValue(0.01)
         layout.addRow("Amount:", self.amount_spin)
-        
+
         # Status
         self.status_combo = QComboBox()
         self.status_combo.addItem("Uncleared", TransactionStatus.UNCLEARED)
@@ -933,25 +983,25 @@ class TransactionDialog(QDialog):
             index = self.status_combo.findData(self.transaction.status)
             self.status_combo.setCurrentIndex(index)
         layout.addRow("Status:", self.status_combo)
-        
+
         # Memo
         self.memo_edit = QLineEdit()
         if self.transaction:
             self.memo_edit.setText(self.transaction.memo)
         layout.addRow("Memo:", self.memo_edit)
-        
+
         # Buttons
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
-        
+
         self.setLayout(layout)
-    
+
     def _on_transaction_type_changed(self):
         """Handle transaction type change to auto-populate fields."""
         trans_type = self.type_combo.currentData()
-        
+
         # Auto-populate payee for interest and dividend types
         if trans_type == "interest":
             self.payee_combo.setEditText("Interest Payment")
@@ -965,47 +1015,47 @@ class TransactionDialog(QDialog):
             # Clear auto-populated values for manual entry
             if self.payee_combo.currentText() in ["Interest Payment", "Dividend Payment"]:
                 self.payee_combo.clearEditText()
-    
+
     def get_data(self):
         """Get dialog data."""
         qdate = self.date_edit.date()
         amount = Decimal(str(self.amount_spin.value()))
         trans_type = self.type_combo.currentData()
-        
+
         # Payment types are negative, all others are positive
         if trans_type == "payment":
             amount = -amount
 
         return {
-            'date': date(qdate.year(), qdate.month(), qdate.day()),
-            'payee': self.payee_combo.currentText(),
-            'amount': amount,
-            'status': self.status_combo.currentData(),
-            'memo': self.memo_edit.text()
+            "date": date(qdate.year(), qdate.month(), qdate.day()),
+            "payee": self.payee_combo.currentText(),
+            "amount": amount,
+            "status": self.status_combo.currentData(),
+            "memo": self.memo_edit.text(),
         }
 
 
 class CategoryDialog(QDialog):
     """Dialog for managing categories."""
-    
+
     def __init__(self, parent, service: MoneyService):
         super().__init__(parent)
         self.service = service
         self.init_ui()
         self.load_categories()
-    
+
     def init_ui(self):
         """Initialize dialog UI."""
         self.setWindowTitle("Categories")
         self.setModal(True)
         self.setMinimumSize(500, 400)
-        
+
         layout = QVBoxLayout()
-        
+
         # Category list
         self.category_list = QListWidget()
         layout.addWidget(self.category_list)
-        
+
         # Buttons
         btn_layout = QHBoxLayout()
         new_btn = QPushButton("New Category")
@@ -1014,15 +1064,15 @@ class CategoryDialog(QDialog):
         delete_btn.clicked.connect(self.delete_category)
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.accept)
-        
+
         btn_layout.addWidget(new_btn)
         btn_layout.addWidget(delete_btn)
         btn_layout.addStretch()
         btn_layout.addWidget(close_btn)
         layout.addLayout(btn_layout)
-        
+
         self.setLayout(layout)
-    
+
     def load_categories(self):
         """Load categories into list."""
         self.category_list.clear()
@@ -1030,27 +1080,28 @@ class CategoryDialog(QDialog):
         for cat in categories:
             income_indicator = "(Income)" if cat.is_income else "(Expense)"
             self.category_list.addItem(f"{cat.name} {income_indicator}")
-    
+
     def new_category(self):
         """Create new category."""
         name, ok = QLineEdit.getText(self, "New Category", "Category name:")
         if ok and name:
             self.service.create_category(name)
             self.load_categories()
-    
+
     def delete_category(self):
         """Delete selected category."""
         row = self.category_list.currentRow()
         if row < 0:
             return
-        
+
         categories = self.service.get_all_categories()
         if row < len(categories):
             category = categories[row]
             reply = QMessageBox.question(
-                self, "Confirm Delete",
+                self,
+                "Confirm Delete",
                 f"Delete category '{category.name}'?",
-                QMessageBox.Yes | QMessageBox.No
+                QMessageBox.Yes | QMessageBox.No,
             )
             if reply == QMessageBox.Yes:
                 self.service.delete_category(category.id)
@@ -1059,30 +1110,30 @@ class CategoryDialog(QDialog):
 
 class PayeeDialog(QDialog):
     """Dialog for managing predefined payees."""
-    
+
     def __init__(self, parent, service: MoneyService):
         super().__init__(parent)
         self.service = service
         self.init_ui()
         self.load_payees()
-    
+
     def init_ui(self):
         """Initialize dialog UI."""
         self.setWindowTitle("Manage Payees")
         self.setModal(True)
         self.setMinimumSize(500, 400)
-        
+
         layout = QVBoxLayout()
-        
+
         # Info label
         info_label = QLabel("Predefined payees appear in the dropdown when creating transactions.")
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
-        
+
         # Payee list
         self.payee_list = QListWidget()
         layout.addWidget(self.payee_list)
-        
+
         # Buttons
         btn_layout = QHBoxLayout()
         new_btn = QPushButton("Add Payee")
@@ -1091,41 +1142,43 @@ class PayeeDialog(QDialog):
         delete_btn.clicked.connect(self.delete_payee)
         close_btn = QPushButton("Close")
         close_btn.clicked.connect(self.accept)
-        
+
         btn_layout.addWidget(new_btn)
         btn_layout.addWidget(delete_btn)
         btn_layout.addStretch()
         btn_layout.addWidget(close_btn)
         layout.addLayout(btn_layout)
-        
+
         self.setLayout(layout)
-    
+
     def load_payees(self):
         """Load predefined payees into list."""
         self.payee_list.clear()
         payees = self.service.get_predefined_payees()
         for payee in payees:
             self.payee_list.addItem(payee)
-    
+
     def new_payee(self):
         """Add new predefined payee."""
         from PySide6.QtWidgets import QInputDialog
+
         name, ok = QInputDialog.getText(self, "Add Payee", "Payee name:")
         if ok and name and name.strip():
             self.service.add_payee(name.strip())
             self.load_payees()
-    
+
     def delete_payee(self):
         """Delete selected predefined payee."""
         current_item = self.payee_list.currentItem()
         if not current_item:
             return
-        
+
         payee_name = current_item.text()
         reply = QMessageBox.question(
-            self, "Confirm Delete",
+            self,
+            "Confirm Delete",
             f"Delete payee '{payee_name}'?\\n\\nNote: This only removes it from the predefined list.\\nExisting transactions will not be affected.",
-            QMessageBox.Yes | QMessageBox.No
+            QMessageBox.Yes | QMessageBox.No,
         )
         if reply == QMessageBox.Yes:
             self.service.delete_payee(payee_name)
@@ -1134,25 +1187,25 @@ class PayeeDialog(QDialog):
 
 class SettingsDialog(QDialog):
     """Dialog for application settings."""
-    
+
     def __init__(self, parent, settings):
         super().__init__(parent)
         self.settings = settings
         self.init_ui()
-    
+
     def init_ui(self):
         """Initialize dialog UI."""
         self.setWindowTitle("Settings")
         self.setModal(True)
         self.setMinimumWidth(450)
-        
+
         layout = QVBoxLayout()
         form = QFormLayout()
-        
+
         # Currency selection
         currency_label = QLabel("Currency:")
         self.currency_combo = QComboBox()
-        
+
         # Add currencies sorted by code
         current_code = self.settings.currency_code
         current_index = 0
@@ -1161,15 +1214,15 @@ class SettingsDialog(QDialog):
             self.currency_combo.addItem(display_text, code)
             if code == current_code:
                 current_index = i
-        
+
         self.currency_combo.setCurrentIndex(current_index)
         form.addRow(currency_label, self.currency_combo)
-        
+
         # Thousands separator
         self.thousands_check = QCheckBox("Use thousands separator (1,000.00)")
         self.thousands_check.setChecked(self.settings.get("thousands_separator", True))
         form.addRow("", self.thousands_check)
-        
+
         # Date format
         date_label = QLabel("Date format:")
         self.date_combo = QComboBox()
@@ -1187,90 +1240,93 @@ class SettingsDialog(QDialog):
                 current_fmt_index = i
         self.date_combo.setCurrentIndex(current_fmt_index)
         form.addRow(date_label, self.date_combo)
-        
+
         layout.addLayout(form)
-        
+
         # Preview
         layout.addSpacing(10)
         preview_group = QWidget()
         preview_layout = QVBoxLayout()
         preview_layout.setContentsMargins(10, 10, 10, 10)
-        
+
         self.preview_label = QLabel()
-        self.preview_label.setStyleSheet("background-color: #f0f0f0; padding: 10px; border: 1px solid #ccc;")
+        self.preview_label.setStyleSheet(
+            "background-color: #f0f0f0; padding: 10px; border: 1px solid #ccc;"
+        )
         self.update_preview()
         preview_layout.addWidget(QLabel("Preview:"))
         preview_layout.addWidget(self.preview_label)
         preview_group.setLayout(preview_layout)
         layout.addWidget(preview_group)
-        
+
         # Connect signals to update preview
         self.currency_combo.currentIndexChanged.connect(self.update_preview)
         self.thousands_check.stateChanged.connect(self.update_preview)
         self.date_combo.currentIndexChanged.connect(self.update_preview)
-        
+
         # Buttons
         layout.addSpacing(10)
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
-        
+
         self.setLayout(layout)
-    
+
     def update_preview(self):
         """Update the preview label."""
         from datetime import date
-        
+
         # Get current selections
         currency_code = self.currency_combo.currentData()
         use_thousands = self.thousands_check.isChecked()
         date_format = self.date_combo.currentData()
-        
+
         # Create temporary settings for preview
         currency_info = CURRENCIES[currency_code]
         symbol = currency_info["symbol"]
         decimal_places = currency_info["decimal_places"]
-        
+
         # Format sample amount
         amount = 1234.56
         if use_thousands:
             amount_str = f"{amount:,.{decimal_places}f}"
         else:
             amount_str = f"{amount:.{decimal_places}f}"
-        
+
         if symbol in ["Fr", "kr", "R"]:
             currency_str = f"{symbol} {amount_str}"
         else:
             currency_str = f"{symbol}{amount_str}"
-        
+
         # Format sample date
         sample_date = date(2026, 3, 15)
         date_str = sample_date.strftime(date_format)
-        
+
         # Display preview
         preview_text = f"Amount: {currency_str}\nDate: {date_str}"
         self.preview_label.setText(preview_text)
-    
+
     def accept(self):
         """Save settings and close."""
         # Save currency
         currency_code = self.currency_combo.currentData()
         self.settings.currency_code = currency_code
-        
+
         # Save thousands separator
         self.settings.set("thousands_separator", self.thousands_check.isChecked())
-        
+
         # Save date format
         date_format = self.date_combo.currentData()
         self.settings.date_format = date_format
-        
+
         super().accept()
 
 
 def QLineEdit_getText(parent, title, label):
     """Simple helper for text input dialog."""
     from PySide6.QtWidgets import QInputDialog
+
     return QInputDialog.getText(parent, title, label)
 
 

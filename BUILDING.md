@@ -211,9 +211,9 @@ For automated builds, add to CI:
 
 ## Summary
 
-✅ **For family/friends**: Build unsigned, share with instructions  
-✅ **For personal use**: Build and use locally  
-✅ **For public release**: Consider Apple Developer account + signing  
+✅ **For family/friends**: Build unsigned, share with instructions
+✅ **For personal use**: Build and use locally
+✅ **For public release**: Consider Apple Developer account + signing
 ✅ **Easy distribution**: Zip the .app or share DMG
 
 The build process is straightforward and the resulting app works on any Mac without Python installed!

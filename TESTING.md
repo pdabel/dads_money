@@ -122,10 +122,10 @@ def test_get_account_balance_history(self, storage: Storage, sample_account: Acc
     # Create account and update balance over time
     txn1 = Transaction(account_id=sample_account.id, amount=Decimal("100.00"))
     txn2 = Transaction(account_id=sample_account.id, amount=Decimal("-50.00"))
-    
+
     storage.save_transaction(txn1)
     storage.save_transaction(txn2)
-    
+
     history = storage.get_account_balance_history(sample_account.id)
     assert len(history) > 0
 ```
@@ -146,29 +146,29 @@ For every function/method, test:
 ```python
 class TestNameOfFunction:
     """Tests for specific functionality."""
-    
+
     def test_happy_path(self, storage: Storage) -> None:
         """Test normal operation."""
         # Setup
         account = Account(...)
-        
+
         # Execute
         result = storage.get_account(account.id)
-        
+
         # Verify
         assert result is not None
         assert result.name == account.name
-    
+
     def test_edge_case_empty_result(self, storage: Storage) -> None:
         """Test when result is empty/null."""
         result = storage.get_account("nonexistent_id")
         assert result is None
-    
+
     def test_type_preservation(self, storage: Storage) -> None:
         """Test that types are preserved through storage."""
         account = Account(opening_balance=Decimal("123.45"))
         storage.save_account(account)
-        
+
         retrieved = storage.get_account(account.id)
         assert isinstance(retrieved.opening_balance, Decimal)
         assert retrieved.opening_balance == Decimal("123.45")
@@ -301,7 +301,7 @@ Focus on red lines (0% coverage).
 
 ### How much time for 70% coverage?
 - Storage/Services tests: ~30 minutes
-- Import/Export round-trips: ~20 minutes  
+- Import/Export round-trips: ~20 minutes
 - Edge cases and error handling: ~20 minutes
 - Settings and config: ~15 minutes
 - **Total**: ~1.5 hours for complete coverage

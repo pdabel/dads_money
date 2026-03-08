@@ -56,9 +56,7 @@ class TestCSVEdgeCases:
         csv_content = '''Date,Payee,Memo,Amount
 2024-03-15,"Store, Inc.","Payment for ""supplies""",100.00
 '''
-        with NamedTemporaryFile(
-            mode="w", suffix=".csv", delete=False, newline=""
-        ) as f:
+        with NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="") as f:
             f.write(csv_content)
             temp_file = Path(f.name)
 
@@ -141,7 +139,9 @@ class TestCSVEdgeCases:
 
     def test_csv_debit_credit_columns(self) -> None:
         """Test CSV with separate debit/credit columns."""
-        csv_content = "Date,Payee,Debit,Credit\n2024-03-15,Income,,1000.00\n2024-03-16,Expense,50.00,\n"
+        csv_content = (
+            "Date,Payee,Debit,Credit\n2024-03-15,Income,,1000.00\n2024-03-16,Expense,50.00,\n"
+        )
         with NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
             f.write(csv_content)
             temp_file = Path(f.name)
@@ -264,8 +264,7 @@ class TestCSVEdgeCases:
     def test_csv_roundtrip_many_transactions(self) -> None:
         """Test writing and parsing many transactions."""
         transactions = [
-            Transaction(payee=f"Payee {i}", amount=Decimal(str(i * 10)))
-            for i in range(50)
+            Transaction(payee=f"Payee {i}", amount=Decimal(str(i * 10))) for i in range(50)
         ]
 
         with NamedTemporaryFile(suffix=".csv", delete=False) as f:

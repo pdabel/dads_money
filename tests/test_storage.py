@@ -204,9 +204,7 @@ class TestTransactionStorage:
         assert retrieved.amount == Decimal("-4.50")
         assert retrieved.category_id == sample_category.id
 
-    def test_transaction_with_all_fields(
-        self, storage: Storage, sample_account: Account
-    ) -> None:
+    def test_transaction_with_all_fields(self, storage: Storage, sample_account: Account) -> None:
         """Test saving transaction with all fields."""
         txn = Transaction(
             account_id=sample_account.id,
@@ -225,9 +223,7 @@ class TestTransactionStorage:
         assert retrieved.status == TransactionStatus.CLEARED
         assert retrieved.memo == "Test memo"
 
-    def test_get_transactions_for_account(
-        self, storage: Storage, sample_account: Account
-    ) -> None:
+    def test_get_transactions_for_account(self, storage: Storage, sample_account: Account) -> None:
         """Test retrieving all transactions for an account."""
         txn1 = Transaction(
             account_id=sample_account.id,
@@ -248,13 +244,9 @@ class TestTransactionStorage:
         assert "Payee 1" in payees
         assert "Payee 2" in payees
 
-    def test_update_transaction(
-        self, storage: Storage, sample_account: Account
-    ) -> None:
+    def test_update_transaction(self, storage: Storage, sample_account: Account) -> None:
         """Test updating a transaction."""
-        txn = Transaction(
-            account_id=sample_account.id, payee="Original", amount=Decimal("100.00")
-        )
+        txn = Transaction(account_id=sample_account.id, payee="Original", amount=Decimal("100.00"))
         storage.save_transaction(txn)
 
         txn.payee = "Updated"
@@ -265,9 +257,7 @@ class TestTransactionStorage:
         assert retrieved.payee == "Updated"
         assert retrieved.amount == Decimal("150.00")
 
-    def test_delete_transaction(
-        self, storage: Storage, sample_account: Account
-    ) -> None:
+    def test_delete_transaction(self, storage: Storage, sample_account: Account) -> None:
         """Test deleting a transaction."""
         txn = Transaction(
             account_id=sample_account.id,
@@ -304,9 +294,7 @@ class TestTransactionStorage:
         assert Decimal("60.00") in amounts
         assert Decimal("40.00") in amounts
 
-    def test_transaction_status_preserved(
-        self, storage: Storage, sample_account: Account
-    ) -> None:
+    def test_transaction_status_preserved(self, storage: Storage, sample_account: Account) -> None:
         """Test that transaction status is preserved."""
         for status in [
             TransactionStatus.UNCLEARED,
@@ -328,9 +316,7 @@ class TestTransactionStorage:
 class TestDecimalPreservation:
     """Tests for Decimal type preservation in storage."""
 
-    def test_account_balance_decimal_precision(
-        self, storage: Storage
-    ) -> None:
+    def test_account_balance_decimal_precision(self, storage: Storage) -> None:
         """Test that Decimal precision is preserved for account balances."""
         account = Account(
             name="Precision Test",

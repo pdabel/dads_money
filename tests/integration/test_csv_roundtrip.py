@@ -55,10 +55,7 @@ class TestCSVRoundTrip:
             Decimal("-50.25"),
         ]
 
-        transactions = [
-            Transaction(payee=f"Payee {amt}", amount=amt)
-            for amt in amounts
-        ]
+        transactions = [Transaction(payee=f"Payee {amt}", amount=amt) for amt in amounts]
 
         with NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
             temp_file = Path(f.name)
@@ -208,16 +205,14 @@ class TestCSVRoundTrip:
 2024-03-15,50.00,Coffee Shop,Morning coffee,
 2024-03-16,-75.00,Electric Company,Monthly bill,
 """
-        with NamedTemporaryFile(
-            mode="w", suffix=".csv", delete=False, newline=""
-        ) as f:
+        with NamedTemporaryFile(mode="w", suffix=".csv", delete=False, newline="") as f:
             f.write(csv_content)
             temp_file = Path(f.name)
 
         try:
             parsed = CSVParser.parse_file(str(temp_file))
             assert len(parsed) >= 2
-            
+
             # Parser should handle alternate column names
             payees = {t.payee for t in parsed}
             assert "Coffee Shop" in payees or "Electric Company" in payees

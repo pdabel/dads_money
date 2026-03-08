@@ -62,11 +62,11 @@ The application supports 20 major world currencies:
 
 Your currency and format choices are applied throughout the application:
 
-✓ **Account List** - Balance displays  
-✓ **Transaction Register** - Amount column  
-✓ **Account Dialogs** - Opening balance fields  
-✓ **Transaction Dialogs** - Amount fields  
-✓ **Balance Labels** - Current balance display  
+✓ **Account List** - Balance displays
+✓ **Transaction Register** - Amount column
+✓ **Account Dialogs** - Opening balance fields
+✓ **Transaction Dialogs** - Amount fields
+✓ **Balance Labels** - Current balance display
 ✓ **Date Displays** - All date columns
 
 ## Settings Storage
