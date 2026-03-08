@@ -85,6 +85,49 @@ def get_account(self, account_id: int) -> Account | None:
 
 ---
 
+## 6. Test-Driven Development (TDD)
+
+**Core Logic — MUST Use TDD**: For storage, services, import/export, settings, and models layers, write failing tests first, then implement code to pass them. This ensures deterministic behavior and fast feedback loops.
+- **Storage Layer** ([src/dads_money/storage.py](src/dads_money/storage.py)): Write CRUD test → implement database operation → verify with `make test`
+- **Services Layer** ([src/dads_money/services.py](src/dads_money/services.py)): Test business logic (account/transaction operations) before implementation
+- **Import/Export** ([io_csv.py](src/dads_money/io_csv.py), [io_qif.py](src/dads_money/io_qif.py), [io_ofx.py](src/dads_money/io_ofx.py)): Test edge cases (malformed data, unicode, large amounts) upfront
+- **Settings/Config** ([settings.py](src/dads_money/settings.py), [config.py](src/dads_money/config.py)): Test all 20 currencies and cross-platform paths before implementation
+- **Models** ([models.py](src/dads_money/models.py)): Test Decimal precision and validation constraints first
+
+**UI Layer — DO NOT Use TDD**: PySide6 widget testing is fragile, slow, and has diminishing returns. Instead:
+- Implement UI code → manually test in running application → write integration tests for data flow
+- Example: New dialog → code it → test dialogs/buttons in GUI → write integration test for storage/services interaction
+- Focus integration tests on workflows (account → transaction → export), not UI widgets
+- Reference: [src/dads_money/ui.py](src/dads_money/ui.py)
+
+**Integration Tests — Write After Feature Works**: Test complete workflows that exercise both UI and core logic. Write these after the feature is working.
+- **Workflows**: Account creation → transaction entry → balance updates → export
+- **Round-trips**: Import QIF → parse → verify data → export → re-parse
+- **Multi-component interactions**: Service calling storage calling database
+- Run with `make test-integration`
+
+**TDD Workflow Example**:
+```
+1. RED:   Write test that fails
+   pytest tests/test_storage.py::TestAccountStorage::test_save_and_retrieve_account
+   
+2. GREEN: Implement code to pass test
+   Edit src/dads_money/storage.py → save_account()
+   
+3. REFACTOR: Clean up code while keeping test passing
+   make format && make test
+```
+
+**When to Apply TDD:**
+- ✅ Adding new business logic (accounts, transactions, categories)
+- ✅ Fixing bugs (write failing test first, then fix)
+- ✅ Adding edge case handling (unicode, large numbers, empty inputs)
+- ✅ Data format changes (CSV/QIF parsing rules)
+- ❌ UI implementation (manual test first)
+- ❌ Refactoring existing core code (write tests after, then refactor safely)
+
+---
+
 ## Quick Reference
 
 | Aspect | Rule | Reference |
@@ -92,8 +135,11 @@ def get_account(self, account_id: int) -> Account | None:
 | Import Check | QIF must continue to work | [io_qif.py](src/dads_money/io_qif.py) |
 | Unit Tests | Required for all changes | Run: `make test` |
 | Integration Tests | Required for DB/import-export changes | Run: `make test-integration` |
+| TDD for Logic | Write tests first (storage, services, import/export) | [TESTING.md](TESTING.md) |
+| NO TDD for UI | Manual test, then integration tests | [ui.py](src/dads_money/ui.py) |
 | Currency Type | Always use Decimal, never float | [models.py](src/dads_money/models.py) |
 | Type Hints | Required on all functions | [services.py](src/dads_money/services.py) |
 | Documentation | Update README + IMPLEMENTATION.md | [README.md](README.md), [IMPLEMENTATION.md](IMPLEMENTATION.md) |
 | Format Code | Run Black before commit | Line length: 100, Python 3.10+ |
 | Code Quality | Run all checks | `make check` (lint + format-check) |
+| Coverage | Maintain 70% minimum | `make coverage` |
