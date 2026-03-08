@@ -93,16 +93,16 @@ python demo.py
 ## Files Created
 
 ### Application Code (10 files)
-- `src/dads_money/__init__.py` - Package init
-- `src/dads_money/app.py` - Main entry point
-- `src/dads_money/ui.py` - GUI (655 lines, Money 3.0 style)
-- `src/dads_money/models.py` - Data models (121 lines)
-- `src/dads_money/storage.py` - Database layer (357 lines)
-- `src/dads_money/services.py` - Business logic (175 lines)
-- `src/dads_money/io_qif.py` - QIF parser/writer (165 lines)
-- `src/dads_money/io_csv.py` - CSV parser/writer (108 lines)
-- `src/dads_money/io_ofx.py` - OFX parser (42 lines)
-- `src/dads_money/config.py` - Configuration (29 lines)
+- `src/dads_money/__init__.py` - Package init (3 lines)
+- `src/dads_money/app.py` - Main entry point (28 lines)
+- `src/dads_money/ui.py` - GUI (1,278 lines, Money 3.0 style)
+- `src/dads_money/models.py` - Data models (129 lines)
+- `src/dads_money/storage.py` - Database layer (478 lines)
+- `src/dads_money/services.py` - Business logic (199 lines)
+- `src/dads_money/io_qif.py` - QIF parser/writer (161 lines)
+- `src/dads_money/io_csv.py` - CSV parser/writer (132 lines)
+- `src/dads_money/io_ofx.py` - OFX parser (50 lines)
+- `src/dads_money/config.py` - Configuration (38 lines)
 
 ### Project Files
 - `pyproject.toml` - Package configuration with dependencies
@@ -278,7 +278,7 @@ The core application is complete and functional. Optional future additions:
 ✅ **Ready to use** - launch with `./launch.sh`  
 ✅ **Ready to re-skin** - functional core complete
 
-**Total Lines of Code**: ~1,652 lines  
+**Total Lines of Code**: 2,645 lines  
 **Total Files**: 18  
 **Implementation Time**: Single session  
 **Status**: Production-ready for personal use

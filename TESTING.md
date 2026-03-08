@@ -34,15 +34,15 @@ Why 70%?
 
 | Module | Lines | Coverage Goal | Priority |
 |--------|-------|---------------|----------|
-| `storage.py` | 479 | 90%+ | Critical |
-| `services.py` | 200 | 85%+ | Critical |
+| `storage.py` | 478 | 90%+ | Critical |
+| `services.py` | 199 | 85%+ | Critical |
 | `settings.py` | 150 | 85%+ | High |
-| `io_csv.py` | 133 | 80%+ | High |
-| `io_qif.py` | 162 | 80%+ | High |
-| `models.py` | 121 | 80%+ | High |
-| `io_ofx.py` | 51 | 75%+ | Medium |
-| `config.py` | 39 | 75%+ | Medium |
-| `ui.py` | 1,279 | N/A* | N/A |
+| `io_csv.py` | 132 | 80%+ | High |
+| `io_qif.py` | 161 | 80%+ | High |
+| `models.py` | 129 | 80%+ | High |
+| `io_ofx.py` | 50 | 75%+ | Medium |
+| `config.py` | 38 | 75%+ | Medium |
+| `ui.py` | 1,278 | N/A* | N/A |
 
 *UI layer testing is excluded from coverage requirements due to complexity of GUI testing.
 
