@@ -101,6 +101,7 @@ class MoneyService:
         memo: str = "",
         check_number: str = "",
         status=None,
+        category_id: Optional[str] = None,
     ) -> Transaction:
         """Create a new transaction."""
         from .models import TransactionStatus
@@ -113,6 +114,7 @@ class MoneyService:
             memo=memo,
             check_number=check_number,
             status=status if status is not None else TransactionStatus.UNCLEARED,
+            category_id=category_id,
         )
         self.storage.save_transaction(transaction)
         return transaction

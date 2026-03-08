@@ -82,13 +82,11 @@ class TestConfigPaths:
         assert db_path1 == db_path2
         assert log_path1 == log_path2
 
-    @patch("os.name", "nt")
+    @pytest.mark.skipif(os.name != "nt", reason="Windows-specific test")
     @patch.dict(os.environ, {"APPDATA": "C:\\Users\\TestUser\\AppData\\Roaming"})
     def test_windows_path_handling(self) -> None:
-        """Test Windows path handling with mocked os.name."""
-        # This test mocks the os.name to 'nt' (Windows)
-        # Note: This is a simplified test - full Windows path testing
-        # would require more complex mocking
+        """Test Windows path handling on Windows."""
+        # This test only runs on actual Windows systems
         result = Config.get_user_data_dir()
         assert isinstance(result, Path)
         assert result.name == "DadsMoney"

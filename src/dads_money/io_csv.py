@@ -27,7 +27,8 @@ class CSVParser:
             transaction = Transaction()
 
             # Try common CSV column names (case-insensitive)
-            row_lower = {k.lower(): v for k, v in row.items()}
+            # Filter out None keys that can occur in malformed CSV
+            row_lower = {k.lower(): v for k, v in row.items() if k is not None}
 
             # Date
             if "date" in row_lower:
