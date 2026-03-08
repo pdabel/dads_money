@@ -50,14 +50,15 @@ See [BUILDING.md](BUILDING.md) for details.
 ### ✓ Core Features (Microsoft Money 3.0 Compatible)
 
 1. **Account Management**
-   - Create accounts: Checking, Savings, Credit Card, Cash, Investment, Assets, Liabilities
+   - Create accounts: Current Account, Savings (with subtypes), Credit Card, Cash, Investment, Assets, Liabilities
+   - Savings subtypes: Standard Savings, High Interest Savings, Cash ISA, Stocks & Shares ISA
    - Track balances automatically
    - Edit and manage account details
    - View all accounts in sidebar
 
 2. **Transaction Register**
    - Add/edit/delete transactions
-   - Fields: Date, Check #, Payee, Amount, Memo, Status
+   - Fields: Date, Reference #, Payee, Amount, Memo, Status
    - Transaction statuses: Uncleared, Cleared, Reconciled
    - Automatic balance calculation
    - Sort by date
@@ -138,8 +139,9 @@ The demo will:
 
 ### 2. Create Your First Account
 - Click "New Account" button
-- Enter name (e.g., "My Checking")
-- Select type (Checking)
+- Enter name (e.g., "My Current Account")
+- Select type (Current Account or Savings)
+- If Savings: Choose subtype (Standard Savings, High Interest Savings, Cash ISA, or Stocks & Shares ISA)
 - Enter opening balance
 - Click OK
 
@@ -151,7 +153,7 @@ The demo will:
   - Payee (e.g., "Grocery Store")
   - Amount (negative for expenses)
   - Memo (optional)
-  - Check # (optional)
+  - Reference # (optional - for cheque numbers, direct debit references, etc.)
   - Status (Uncleared/Cleared/Reconciled)
 - Click OK
 
@@ -193,7 +195,7 @@ Built for cross-platform compatibility:
 ### QIF (Quicken Interchange Format)
 - Full read/write support
 - Compatible with Microsoft Money 3.0 exports
-- Fields: Date, Amount, Payee, Memo, Check #, Status
+- Fields: Date, Amount, Payee, Memo, Reference #, Status
 - Account types: Bank, Cash, CCard
 
 ### CSV (Comma-Separated Values)

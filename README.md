@@ -29,12 +29,16 @@ dads-money
 - Classic two-pane layout: Account list on left, transaction register on right
 - Familiar menu structure (File, Edit, Help)
 - Traditional toolbar with quick actions
-- Transaction register with columns for Date, Check #, Payee, Memo, Status, and Amount
+- Transaction register with columns for Date, Reference #, Payee, Memo, Status, and Amount
 
 ### Account Management
 - Create multiple account types:
-  - Checking accounts
-  - Savings accounts
+  - Current accounts (checking)
+  - Savings accounts with subtypes:
+    - Standard Savings
+    - High Interest Savings
+    - Cash ISA
+    - Stocks and Shares ISA
   - Credit cards
   - Cash accounts
   - Investment accounts
@@ -47,7 +51,7 @@ dads-money
 - Double-entry accounting transactions
 - Fields matching Money 3.0:
   - Date (with calendar picker)
-  - Check number
+  - Reference number (for cheques, direct debits, or transaction IDs)
   - Payee
   - Amount
   - Status (Uncleared, Cleared, Reconciled)
@@ -141,12 +145,13 @@ src/dads_money/
 ## Usage Tips
 
 1. **Create your first account**: Click "New Account" button or File → New Account
-2. **Add transactions**: Select an account, then click "New Transaction"
-3. **Choose your currency**: Edit → Settings to select from 20 currencies and set date format
-4. **Import existing data**: File → Import, then select QIF, OFX, or CSV file
-5. **Mark transactions cleared**: Edit a transaction and change Status to "Cleared" or "Reconciled"
-6. **Organize spending**: Edit → Categories to customize your category list
-7. **Export for backup**: File → Export to create QIF or CSV backup files
+2. **Select savings type**: When creating a savings account, choose the appropriate subtype (Standard, High Interest, Cash ISA, or Stocks & Shares ISA)
+3. **Add transactions**: Select an account, then click "New Transaction"
+4. **Choose your currency**: Edit → Settings to select from 20 currencies and set date format (defaults to GBP and UK date format)
+5. **Import existing data**: File → Import, then select QIF, OFX, or CSV file
+6. **Mark transactions cleared**: Edit a transaction and change Status to "Cleared" or "Reconciled"
+7. **Organize spending**: Edit → Categories to customize your category list
+8. **Export for backup**: File → Export to create QIF or CSV backup files
 
 ## Building & Distribution
 

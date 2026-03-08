@@ -16,13 +16,14 @@ A fully functional, Microsoft Money 3.0 compatible personal finance application 
 ### Core Functionality ✅
 
 1. **Account Management**
-   - Multiple account types (Checking, Savings, Credit Card, Cash, Investment, Asset, Liability)
+   - Multiple account types (Current Account, Savings, Credit Card, Cash, Investment, Asset, Liability)
+   - Savings account subtypes (Standard Savings, High Interest Savings, Cash ISA, Stocks & Shares ISA)
    - Opening and current balance tracking
    - Create, edit, view accounts
    - Automatic balance calculation
 
 2. **Transaction Register** 
-   - Date, Payee, Amount, Memo, Check Number, Status fields
+   - Date, Payee, Amount, Memo, Reference Number, Status fields
    - Add, edit, delete transactions
    - Status tracking (Uncleared, Cleared, Reconciled)
    - Automatic chronological sorting
@@ -119,10 +120,10 @@ python demo.py
 ## Features Demonstrated
 
 The demo script successfully demonstrates:
-- ✅ Account creation (Checking, Savings, Credit Card)
+- ✅ Account creation (Current Account, Savings with subtypes, Credit Card)
 - ✅ Transaction entry with all fields
 - ✅ Status tracking (Cleared, Reconciled)
-- ✅ Check number tracking
+- ✅ Reference number tracking
 - ✅ Balance calculation ($1,000 → $2,529.50)
 - ✅ QIF export (readable format)
 - ✅ CSV export (spreadsheet compatible)
@@ -144,7 +145,7 @@ Adding transactions to checking account...
 ✓ Added: Employer Inc. - $2500.00
 ✓ Added: Grocery Store - $-125.50
 ✓ Added: Gas Station - $-45.00
-✓ Added: Landlord - $-800.00 (Check #1001)
+✓ Added: Landlord - $-800.00 (Ref #1001)
 
 Current account balances:
   My Checking          $  2,529.50
@@ -177,7 +178,7 @@ CR
 - ✅ Two-pane layout (accounts left, register right)
 - ✅ Toolbar with common actions
 - ✅ File/Edit/Help menu structure
-- ✅ Transaction register columns (Date, Check #, Payee, Memo, Status, Amount)
+- ✅ Transaction register columns (Date, Reference #, Payee, Memo, Status, Amount)
 - ✅ Status indicators (C, R)
 - ✅ Dialog-based forms
 
@@ -187,8 +188,9 @@ CR
 - ✅ OFX import (modern bank download format)
 
 ### Data Model Match
-- ✅ Account types (Checking, Savings, Credit Card, Cash, Investment, Asset, Liability)
-- ✅ Transaction fields (Date, Payee, Amount, Memo, Check #, Status)
+- ✅ Account types (Current Account, Savings with subtypes, Credit Card, Cash, Investment, Asset, Liability)
+- ✅ Savings subtypes (Standard Savings, High Interest Savings, Cash ISA, Stocks & Shares ISA)
+- ✅ Transaction fields (Date, Payee, Amount, Memo, Reference #, Status)
 - ✅ Categories (Income/Expense with tax flags)
 - ✅ Split transaction support (data model ready)
 

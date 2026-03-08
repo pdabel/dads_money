@@ -75,7 +75,7 @@ def get_account(self, account_id: int) -> Account | None:
 
 ## 5. Feature Compatibility
 
-**Preserve Money 3.0 Parity (MUST)**: The application is designed for Microsoft Money 3.0 compatibility. Maintain the existing 7 account types (Checking, Savings, Credit Card, Cash, Investment, Asset, Liability), transaction fields (Date, Check#, Payee, Memo, Status, Amount), and category structure (17 pre-loaded, income/expense/tax flags).
+**Preserve Money 3.0 Parity (MUST)**: The application is designed for Microsoft Money 3.0 compatibility. Maintain the existing 7 account types (Current Account, Savings, Credit Card, Cash, Investment, Asset, Liability), with Savings accounts supporting 4 subtypes (Standard Savings, High Interest Savings, Cash ISA, Stocks & Shares ISA). Maintain transaction fields (Date, Reference#, Payee, Memo, Status, Amount), and category structure (17 pre-loaded, income/expense/tax flags).
 
 **Support 20 Currencies (MUST)**: The project supports 20 currencies with proper formatting. Changes to currency handling or addition of new currencies MUST maintain this list and update [CURRENCY_GUIDE.md](CURRENCY_GUIDE.md) accordingly.
 
