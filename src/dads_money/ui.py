@@ -24,7 +24,7 @@ from .settings import get_settings, CURRENCIES
 
 class MainWindow(QMainWindow):
     """Main application window with Money 3.0 style interface."""
-    REGISTER_COLUMNS = ["Date", "Check #", "Payee", "Memo", "Status", "Credit", "Debit", "Balance"]
+    REGISTER_COLUMNS = ["Date", "Payee", "Memo", "Status", "Credit", "Debit", "Balance"]
     
     def __init__(self, db_path: Optional[Path] = None):
         super().__init__()
@@ -124,6 +124,10 @@ class MainWindow(QMainWindow):
         categories_action = QAction("&Categories...", self)
         categories_action.triggered.connect(self.manage_categories)
         edit_menu.addAction(categories_action)
+        
+        payees_action = QAction("&Payees...", self)
+        payees_action.triggered.connect(self.manage_payees)
+        edit_menu.addAction(payees_action)
         
         edit_menu.addSeparator()
         
@@ -246,6 +250,14 @@ class MainWindow(QMainWindow):
         """Apply register column visibility from user settings."""
         default_visible = list(range(len(self.REGISTER_COLUMNS)))
         stored_visible = self.settings.get("register_visible_columns", default_visible)
+        stored_column_count = self.settings.get("register_column_count", len(self.REGISTER_COLUMNS))
+
+        # Reset to defaults if the number of columns has changed (e.g., Check # was removed)
+        if stored_column_count != len(self.REGISTER_COLUMNS):
+            stored_visible = default_visible
+            self.settings.set("register_visible_columns", default_visible)
+            self.settings.set("register_column_count", len(self.REGISTER_COLUMNS))
+            self.settings.save()
 
         if not isinstance(stored_visible, list) or not stored_visible:
             stored_visible = default_visible
@@ -294,6 +306,7 @@ class MainWindow(QMainWindow):
                 return
 
             self.settings.set("register_visible_columns", visible_columns)
+            self.settings.set("register_column_count", len(self.REGISTER_COLUMNS))
             self.settings.save()
             self.apply_register_column_visibility()
             dialog.accept()
@@ -303,6 +316,7 @@ class MainWindow(QMainWindow):
                 checkbox.setChecked(True)
             default_visible = list(range(len(self.REGISTER_COLUMNS)))
             self.settings.set("register_visible_columns", default_visible)
+            self.settings.set("register_column_count", len(self.REGISTER_COLUMNS))
             self.settings.save()
             self.apply_register_column_visibility()
 
@@ -387,29 +401,27 @@ class MainWindow(QMainWindow):
 
         opening_date = self.current_account.created_date.strftime(self.settings.date_format)
         self.transaction_table.setItem(0, 0, QTableWidgetItem(opening_date))
-        self.transaction_table.setItem(0, 1, QTableWidgetItem(""))
-        self.transaction_table.setItem(0, 2, QTableWidgetItem("Opening Balance"))
+        self.transaction_table.setItem(0, 1, QTableWidgetItem("Opening Balance"))
+        self.transaction_table.setItem(0, 2, QTableWidgetItem(""))
         self.transaction_table.setItem(0, 3, QTableWidgetItem(""))
         self.transaction_table.setItem(0, 4, QTableWidgetItem(""))
         self.transaction_table.setItem(0, 5, QTableWidgetItem(""))
-        self.transaction_table.setItem(0, 6, QTableWidgetItem(""))
         opening_balance_item = QTableWidgetItem(self.settings.format_currency(running_balance))
         opening_balance_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-        self.transaction_table.setItem(0, 7, opening_balance_item)
+        self.transaction_table.setItem(0, 6, opening_balance_item)
 
         for i, trans in enumerate(transactions, start=1):
             date_formatted = trans.date.strftime(self.settings.date_format)
             self.transaction_table.setItem(i, 0, QTableWidgetItem(date_formatted))
-            self.transaction_table.setItem(i, 1, QTableWidgetItem(trans.check_number))
-            self.transaction_table.setItem(i, 2, QTableWidgetItem(trans.payee))
-            self.transaction_table.setItem(i, 3, QTableWidgetItem(trans.memo))
+            self.transaction_table.setItem(i, 1, QTableWidgetItem(trans.payee))
+            self.transaction_table.setItem(i, 2, QTableWidgetItem(trans.memo))
             
             status_text = ""
             if trans.status == TransactionStatus.RECONCILED:
                 status_text = "R"
             elif trans.status == TransactionStatus.CLEARED:
                 status_text = "C"
-            self.transaction_table.setItem(i, 4, QTableWidgetItem(status_text))
+            self.transaction_table.setItem(i, 3, QTableWidgetItem(status_text))
 
             credit_text = ""
             debit_text = ""
@@ -422,19 +434,19 @@ class MainWindow(QMainWindow):
             credit_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             if credit_text:  # Only set color if there's a value
                 credit_item.setForeground(QColor(0, 128, 0))  # Dark green for credits
-            self.transaction_table.setItem(i, 5, credit_item)
+            self.transaction_table.setItem(i, 4, credit_item)
 
             debit_item = QTableWidgetItem(debit_text)
             debit_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
             if debit_text:  # Only set color if there's a value
                 debit_item.setForeground(QColor(200, 0, 0))  # Red for debits
-            self.transaction_table.setItem(i, 6, debit_item)
+            self.transaction_table.setItem(i, 5, debit_item)
 
             running_balance += trans.amount
             balance_formatted = self.settings.format_currency(running_balance)
             balance_item = QTableWidgetItem(balance_formatted)
             balance_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
-            self.transaction_table.setItem(i, 7, balance_item)
+            self.transaction_table.setItem(i, 6, balance_item)
             
             # Store transaction ID in first column for reference
             self.transaction_table.item(i, 0).setData(Qt.UserRole, trans.id)
@@ -485,7 +497,6 @@ class MainWindow(QMainWindow):
                 payee=trans_data['payee'],
                 memo=trans_data['memo'],
                 amount=trans_data['amount'],
-                check_number=trans_data['check_number'],
                 status=trans_data['status']
             )
             self.service.update_transaction(trans)
@@ -509,7 +520,6 @@ class MainWindow(QMainWindow):
                 transaction.payee = trans_data['payee']
                 transaction.memo = trans_data['memo']
                 transaction.amount = trans_data['amount']
-                transaction.check_number = trans_data['check_number']
                 transaction.status = trans_data['status']
                 self.service.update_transaction(transaction)
                 self.load_accounts(self.current_account.id)
@@ -599,6 +609,11 @@ class MainWindow(QMainWindow):
     def manage_categories(self):
         """Open category management dialog."""
         dialog = CategoryDialog(self, self.service)
+        dialog.exec()
+    
+    def manage_payees(self):
+        """Open payee management dialog."""
+        dialog = PayeeDialog(self, self.service)
         dialog.exec()
     
     def show_settings(self):
@@ -865,24 +880,37 @@ class TransactionDialog(QDialog):
         # Transaction type
         self.type_combo = QComboBox()
         self.type_combo.addItem("Deposit", "deposit")
-        self.type_combo.addItem("Payment (Check)", "payment")
+        self.type_combo.addItem("Payment", "payment")
+        
+        # Add savings-specific transaction types
+        if self.account.account_type == AccountType.SAVINGS:
+            self.type_combo.addItem("Interest", "interest")
+            if self.account.savings_subtype == SavingsAccountType.STOCKS_SHARES_ISA:
+                self.type_combo.addItem("Dividend", "dividend")
+        
         if self.transaction and self.transaction.amount >= 0:
             self.type_combo.setCurrentIndex(0)
         else:
             self.type_combo.setCurrentIndex(1)
+        
+        # Connect signal to update payee when type changes
+        self.type_combo.currentIndexChanged.connect(self._on_transaction_type_changed)
+        
         layout.addRow("Type:", self.type_combo)
         
-        # Check number
-        self.check_edit = QLineEdit()
-        if self.transaction:
-            self.check_edit.setText(self.transaction.check_number)
-        layout.addRow("Check #:", self.check_edit)
+        # Payee - editable combo box with predefined and historical payees
+        self.payee_combo = QComboBox()
+        self.payee_combo.setEditable(True)
+        self.payee_combo.setInsertPolicy(QComboBox.NoInsert)
         
-        # Payee
-        self.payee_edit = QLineEdit()
+        # Load all payees (predefined + historical from transactions)
+        all_payees = self.service.get_all_payees()
+        self.payee_combo.addItems(all_payees)
+        
         if self.transaction:
-            self.payee_edit.setText(self.transaction.payee)
-        layout.addRow("Payee:", self.payee_edit)
+            self.payee_combo.setEditText(self.transaction.payee)
+        
+        layout.addRow("Payee:", self.payee_combo)
         
         # Amount
         self.amount_spin = QDoubleSpinBox()
@@ -920,17 +948,37 @@ class TransactionDialog(QDialog):
         
         self.setLayout(layout)
     
+    def _on_transaction_type_changed(self):
+        """Handle transaction type change to auto-populate fields."""
+        trans_type = self.type_combo.currentData()
+        
+        # Auto-populate payee for interest and dividend types
+        if trans_type == "interest":
+            self.payee_combo.setEditText("Interest Payment")
+        elif trans_type == "dividend":
+            self.payee_combo.setEditText("Dividend Payment")
+        elif trans_type == "deposit":
+            # Clear auto-populated values for manual entry
+            if self.payee_combo.currentText() in ["Interest Payment", "Dividend Payment"]:
+                self.payee_combo.clearEditText()
+        elif trans_type == "payment":
+            # Clear auto-populated values for manual entry
+            if self.payee_combo.currentText() in ["Interest Payment", "Dividend Payment"]:
+                self.payee_combo.clearEditText()
+    
     def get_data(self):
         """Get dialog data."""
         qdate = self.date_edit.date()
         amount = Decimal(str(self.amount_spin.value()))
-        if self.type_combo.currentData() == "payment":
+        trans_type = self.type_combo.currentData()
+        
+        # Payment types are negative, all others are positive
+        if trans_type == "payment":
             amount = -amount
 
         return {
             'date': date(qdate.year(), qdate.month(), qdate.day()),
-            'check_number': self.check_edit.text(),
-            'payee': self.payee_edit.text(),
+            'payee': self.payee_combo.currentText(),
             'amount': amount,
             'status': self.status_combo.currentData(),
             'memo': self.memo_edit.text()
@@ -1007,6 +1055,81 @@ class CategoryDialog(QDialog):
             if reply == QMessageBox.Yes:
                 self.service.delete_category(category.id)
                 self.load_categories()
+
+
+class PayeeDialog(QDialog):
+    """Dialog for managing predefined payees."""
+    
+    def __init__(self, parent, service: MoneyService):
+        super().__init__(parent)
+        self.service = service
+        self.init_ui()
+        self.load_payees()
+    
+    def init_ui(self):
+        """Initialize dialog UI."""
+        self.setWindowTitle("Manage Payees")
+        self.setModal(True)
+        self.setMinimumSize(500, 400)
+        
+        layout = QVBoxLayout()
+        
+        # Info label
+        info_label = QLabel("Predefined payees appear in the dropdown when creating transactions.")
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+        
+        # Payee list
+        self.payee_list = QListWidget()
+        layout.addWidget(self.payee_list)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        new_btn = QPushButton("Add Payee")
+        new_btn.clicked.connect(self.new_payee)
+        delete_btn = QPushButton("Delete")
+        delete_btn.clicked.connect(self.delete_payee)
+        close_btn = QPushButton("Close")
+        close_btn.clicked.connect(self.accept)
+        
+        btn_layout.addWidget(new_btn)
+        btn_layout.addWidget(delete_btn)
+        btn_layout.addStretch()
+        btn_layout.addWidget(close_btn)
+        layout.addLayout(btn_layout)
+        
+        self.setLayout(layout)
+    
+    def load_payees(self):
+        """Load predefined payees into list."""
+        self.payee_list.clear()
+        payees = self.service.get_predefined_payees()
+        for payee in payees:
+            self.payee_list.addItem(payee)
+    
+    def new_payee(self):
+        """Add new predefined payee."""
+        from PySide6.QtWidgets import QInputDialog
+        name, ok = QInputDialog.getText(self, "Add Payee", "Payee name:")
+        if ok and name and name.strip():
+            self.service.add_payee(name.strip())
+            self.load_payees()
+    
+    def delete_payee(self):
+        """Delete selected predefined payee."""
+        current_item = self.payee_list.currentItem()
+        if not current_item:
+            return
+        
+        payee_name = current_item.text()
+        reply = QMessageBox.question(
+            self, "Confirm Delete",
+            f"Delete payee '{payee_name}'?\\n\\nNote: This only removes it from the predefined list.\\nExisting transactions will not be affected.",
+            QMessageBox.Yes | QMessageBox.No
+        )
+        if reply == QMessageBox.Yes:
+            self.service.delete_payee(payee_name)
+            self.load_payees()
 
 
 class SettingsDialog(QDialog):

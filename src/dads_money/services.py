@@ -179,3 +179,21 @@ class MoneyService:
             self.storage.save_transaction(trans)
             count += 1
         return count
+    
+    # Payee operations
+    def get_all_payees(self) -> List[str]:
+        """Get all payees (both predefined and from transactions)."""
+        return self.storage.get_all_payees()
+    
+    def add_payee(self, name: str):
+        """Add a predefined payee."""
+        self.storage.add_payee(name)
+    
+    def delete_payee(self, name: str):
+        """Delete a predefined payee."""
+        self.storage.delete_payee(name)
+    
+    def get_predefined_payees(self) -> List[str]:
+        """Get only predefined payees."""
+        return self.storage.get_predefined_payees()
+

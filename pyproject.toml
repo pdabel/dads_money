@@ -22,7 +22,9 @@ dependencies = [
 dev = [
     "pytest>=7.4.0",
     "pytest-qt>=4.2.0",
+    "pytest-cov>=4.1.0",
     "black>=23.0.0",
+    "mypy>=1.0.0",
 ]
 
 [project.scripts]
@@ -34,3 +36,36 @@ where = ["src"]
 [tool.black]
 line-length = 100
 target-version = ["py310"]
+
+[tool.pytest.ini_options]
+minversion = "7.0"
+addopts = "-ra -q --strict-markers"
+testpaths = ["tests"]
+python_files = ["test_*.py", "*_test.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+
+[tool.coverage.run]
+source = ["src/dads_money"]
+branch = true
+omit = [
+    "*/__pycache__/*",
+    "*/site-packages/*",
+    "src/dads_money/app.py",
+]
+
+[tool.coverage.report]
+precision = 2
+show_missing = true
+skip_covered = false
+fail_under = 70
+exclude_lines = [
+    "pragma: no cover",
+    "def __repr__",
+    "raise AssertionError",
+    "raise NotImplementedError",
+    "if __name__ == .__main__.:",
+    "if TYPE_CHECKING:",
+    "if 0:",
+    "if False:",
+]

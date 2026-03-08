@@ -99,10 +99,20 @@ class Storage:
             )
         """)
         
+        # Payees table for predefined payees
+        cursor.execute("""
+            CREATE TABLE IF NOT EXISTS payees (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL UNIQUE,
+                created_date TEXT NOT NULL
+            )
+        """)
+        
         # Indexes for performance
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_trans_account ON transactions(account_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_trans_date ON transactions(date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_splits_trans ON splits(transaction_id)")
+        cursor.execute("CREATE INDEX IF NOT EXISTS idx_payees_name ON payees(name)")
         
         self.conn.commit()
         self._seed_default_categories()
@@ -131,6 +141,8 @@ class Storage:
         default_categories = [
             Category(name="Income", is_income=True),
             Category(name="Salary", is_income=True),
+            Category(name="Interest Income", is_income=True),
+            Category(name="Dividend Income", is_income=True),
             Category(name="Auto", is_income=False),
             Category(name="Banking", is_income=False),
             Category(name="Bills", is_income=False),
@@ -383,6 +395,58 @@ class Storage:
             amount=Decimal(row["amount"]),
             memo=row["memo"] or ""
         )
+    
+    # Payee operations
+    def get_all_payees(self) -> List[str]:
+        """Get all payees (both predefined and from transactions)."""
+        cursor = self.conn.cursor()
+        
+        # Get predefined payees
+        predefined = cursor.execute(
+            "SELECT name FROM payees ORDER BY name"
+        ).fetchall()
+        payees = set(row["name"] for row in predefined)
+        
+        # Get unique payees from transactions
+        transaction_payees = cursor.execute(
+            "SELECT DISTINCT payee FROM transactions WHERE payee IS NOT NULL AND payee != '' ORDER BY payee"
+        ).fetchall()
+        payees.update(row["payee"] for row in transaction_payees)
+        
+        return sorted(list(payees))
+    
+    def add_payee(self, name: str):
+        """Add a predefined payee."""
+        from uuid import uuid4
+        from datetime import datetime
+        
+        if not name or not name.strip():
+            return
+        
+        cursor = self.conn.cursor()
+        try:
+            cursor.execute("""
+                INSERT INTO payees (id, name, created_date)
+                VALUES (?, ?, ?)
+            """, (str(uuid4()), name.strip(), datetime.now().isoformat()))
+            self.conn.commit()
+        except sqlite3.IntegrityError:
+            # Payee already exists
+            pass
+    
+    def delete_payee(self, name: str):
+        """Delete a predefined payee."""
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM payees WHERE name = ?", (name,))
+        self.conn.commit()
+    
+    def get_predefined_payees(self) -> List[str]:
+        """Get only predefined payees."""
+        cursor = self.conn.cursor()
+        rows = cursor.execute(
+            "SELECT name FROM payees ORDER BY name"
+        ).fetchall()
+        return [row["name"] for row in rows]
     
     def _update_account_balance(self, account_id: str):
         """Recalculate account balance from transactions."""
