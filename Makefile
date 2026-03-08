@@ -1,4 +1,4 @@
-.PHONY: help check lint format-check format test test-integration test-all coverage coverage-report clean install
+.PHONY: help check lint format-check format test test-integration test-all coverage coverage-report clean install pre-commit pre-commit-install pre-commit-run
 
 help:
 	@echo "Dad's Money - Available Make Targets"
@@ -9,6 +9,7 @@ help:
 	@echo "  make lint            - Run type checking with mypy"
 	@echo "  make format-check    - Check code formatting with Black"
 	@echo "  make format          - Apply Black formatting to code"
+	@echo "  make pre-commit-run  - Run pre-commit hooks on all files"
 	@echo ""
 	@echo "Testing:"
 	@echo "  make test            - Run unit tests with pytest"
@@ -20,6 +21,7 @@ help:
 	@echo "Utilities:"
 	@echo "  make clean           - Clean up build artifacts and cache"
 	@echo "  make install-dev     - Install development dependencies"
+	@echo "  make pre-commit-install - Install pre-commit Git hooks"
 	@echo ""
 
 # Check all code quality rules
@@ -91,3 +93,14 @@ install-dev:
 	@echo "Installing development dependencies..."
 	pip install -e ".[dev]"
 	@echo "✓ Development dependencies installed!"
+
+# Install pre-commit hooks
+pre-commit-install:
+	@echo "Installing pre-commit Git hooks..."
+	pre-commit install
+	@echo "✓ Pre-commit hooks installed! They will run automatically on git commit."
+
+# Run pre-commit on all files
+pre-commit-run:
+	@echo "Running pre-commit hooks on all files..."
+	pre-commit run --all-files
