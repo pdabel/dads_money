@@ -8,7 +8,7 @@ from PySide6.QtWidgets import QApplication
 from .ui import MainWindow
 
 
-def main(db_path: Optional[Path] = None):
+def main(db_path: Optional[Path] = None) -> None:
     """Launch the Dad's Money application.
 
     Args:

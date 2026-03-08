@@ -19,6 +19,12 @@ def create_account(self, name: str, account_type: str, currency: str) -> Account
 
 **Black Formatter (MUST)**: Run `black src/ --line-length 100 --target-version py310` before committing code changes. Project uses line-length of 100 and targets Python 3.10+.
 
+**No Suppression to “Go Green” (MUST)**: Agents MUST fix root causes instead of hiding failures.
+- **Forbidden**: `|| true`, blanket lint/type suppressions, and disabling checks in CI just to pass.
+- **Forbidden**: broad mypy flags like global `--ignore-missing-imports` when they hide real project issues.
+- **Allowed only when unavoidable**: narrowly scoped suppression for third-party limitations (e.g., missing stubs), with explicit module-level targeting and a short rationale in config.
+- **When blocked**: report the blocker clearly and keep checks honest (do not mask failures).
+
 **Docstrings (MUST)**: All public functions and classes MUST have docstrings. Include Args and Returns for clarity. Example from [src/dads_money/storage.py](src/dads_money/storage.py):
 ```python
 def get_account(self, account_id: int) -> Account | None:
@@ -44,6 +50,10 @@ def get_account(self, account_id: int) -> Account | None:
 - Edge cases (empty inputs, boundary values)
 - Error handling (invalid data, exceptions)
 - Example: If adding a method to `MoneyService`, add tests in `tests/test_services.py`
+
+**Checks Must Fail Loudly (MUST)**: CI and local validation commands must surface real failures.
+- Do not swallow non-zero exits from `pytest`, `mypy`, or formatting checks.
+- If a rule must be scoped down temporarily, prefer precise allowlists over global disables, and document the reason.
 
 **Integration Tests for Database/Import-Export (MUST)**: When modifying [src/dads_money/storage.py](src/dads_money/storage.py) or import/export modules ([src/dads_money/io_qif.py](src/dads_money/io_qif.py), [src/dads_money/io_csv.py](src/dads_money/io_csv.py), [src/dads_money/io_ofx.py](src/dads_money/io_ofx.py)), MUST add or update integration tests in `tests/integration/`. These tests should verify:
 - Full round-trip workflows (create → save → load → verify)

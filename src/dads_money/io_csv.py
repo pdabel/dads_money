@@ -1,7 +1,7 @@
 """CSV import/export for transactions."""
 
 import csv
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 from typing import List, TextIO
 
@@ -69,7 +69,7 @@ class CSVParser:
         return transactions
 
     @staticmethod
-    def _parse_date(date_str: str) -> datetime.date:
+    def _parse_date(date_str: str) -> date:
         """Parse various date formats."""
         if not date_str:
             return datetime.now().date()
@@ -127,13 +127,13 @@ class CSVWriter:
     """Write transactions to CSV format."""
 
     @staticmethod
-    def write_file(file_path: str, transactions: List[Transaction]):
+    def write_file(file_path: str, transactions: List[Transaction]) -> None:
         """Write transactions to CSV file."""
         with open(file_path, "w", encoding="utf-8", newline="") as f:
             CSVWriter.write(f, transactions)
 
     @staticmethod
-    def write(file: TextIO, transactions: List[Transaction]):
+    def write(file: TextIO, transactions: List[Transaction]) -> None:
         """Write transactions to CSV format."""
         fieldnames = ["Date", "Payee", "Memo", "Amount", "Status", "Check Number"]
         writer = csv.DictWriter(file, fieldnames=fieldnames)

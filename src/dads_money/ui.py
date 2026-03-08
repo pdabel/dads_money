@@ -4,7 +4,7 @@ import sys
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from PySide6.QtCore import Qt, QDate
 from PySide6.QtGui import QAction, QFont, QColor
@@ -64,7 +64,7 @@ class MainWindow(QMainWindow):
         self._add_to_recent_databases(self.current_db_path)
         self._update_window_title()
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         """Initialize the user interface."""
         self.setGeometry(100, 100, 1200, 700)
 
@@ -79,7 +79,7 @@ class MainWindow(QMainWindow):
         main_layout = QHBoxLayout()
 
         # Create splitter for accounts and register
-        splitter = QSplitter(Qt.Horizontal)
+        splitter = QSplitter(Qt.Horizontal)  # type: ignore[attr-defined]
 
         # Left panel - Account list
         left_panel = self.create_account_panel()
@@ -99,7 +99,7 @@ class MainWindow(QMainWindow):
         # Status bar
         self.statusBar().showMessage("Ready")
 
-    def create_menus(self):
+    def create_menus(self) -> None:
         """Create menu bar."""
         menubar = self.menuBar()
 
@@ -174,7 +174,7 @@ class MainWindow(QMainWindow):
         about_action.triggered.connect(self.show_about)
         help_menu.addAction(about_action)
 
-    def create_toolbar(self):
+    def create_toolbar(self) -> None:
         """Create toolbar."""
         toolbar = self.addToolBar("Main")
         toolbar.setMovable(False)
@@ -250,8 +250,8 @@ class MainWindow(QMainWindow):
         self.transaction_table.setColumnCount(len(self.REGISTER_COLUMNS))
         self.transaction_table.setHorizontalHeaderLabels(self.REGISTER_COLUMNS)
         self.transaction_table.horizontalHeader().setStretchLastSection(False)
-        self.transaction_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)
-        self.transaction_table.setSelectionBehavior(QTableWidget.SelectRows)
+        self.transaction_table.horizontalHeader().setSectionResizeMode(2, QHeaderView.Stretch)  # type: ignore[attr-defined]
+        self.transaction_table.setSelectionBehavior(QTableWidget.SelectRows)  # type: ignore[attr-defined]
         self.transaction_table.doubleClicked.connect(self.edit_transaction)
         self.apply_register_column_visibility()
         layout.addWidget(self.transaction_table)
@@ -273,7 +273,7 @@ class MainWindow(QMainWindow):
         panel.setLayout(layout)
         return panel
 
-    def apply_register_column_visibility(self):
+    def apply_register_column_visibility(self) -> None:
         """Apply register column visibility from user settings."""
         default_visible = list(range(len(self.REGISTER_COLUMNS)))
         stored_visible = self.settings.get("register_visible_columns", default_visible)
@@ -306,7 +306,7 @@ class MainWindow(QMainWindow):
                 column_index, column_index not in visible_columns
             )
 
-    def choose_register_columns(self):
+    def choose_register_columns(self) -> None:
         """Allow user to choose which register columns are visible."""
         dialog = QDialog(self)
         dialog.setWindowTitle("Register Columns")
@@ -321,10 +321,10 @@ class MainWindow(QMainWindow):
             checkboxes.append(checkbox)
             layout.addWidget(checkbox)
 
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
-        reset_button = buttons.addButton("Reset to Default", QDialogButtonBox.ResetRole)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)  # type: ignore[attr-defined]
+        reset_button = buttons.addButton("Reset to Default", QDialogButtonBox.ResetRole)  # type: ignore[attr-defined]
 
-        def save_columns():
+        def save_columns() -> None:
             visible_columns = [
                 index for index, checkbox in enumerate(checkboxes) if checkbox.isChecked()
             ]
@@ -341,7 +341,7 @@ class MainWindow(QMainWindow):
             self.apply_register_column_visibility()
             dialog.accept()
 
-        def reset_columns():
+        def reset_columns() -> None:
             for checkbox in checkboxes:
                 checkbox.setChecked(True)
             default_visible = list(range(len(self.REGISTER_COLUMNS)))
@@ -358,7 +358,7 @@ class MainWindow(QMainWindow):
         dialog.setLayout(layout)
         dialog.exec()
 
-    def load_accounts(self, selected_account_id: Optional[str] = None):
+    def load_accounts(self, selected_account_id: Optional[str] = None) -> None:
         """Load accounts into the list."""
         if selected_account_id is None and self.current_account:
             selected_account_id = self.current_account.id
@@ -375,7 +375,7 @@ class MainWindow(QMainWindow):
 
             balance_str = self.settings.format_currency(account.current_balance)
             item = QListWidgetItem(f"{account.name} ({account_type_display}) - {balance_str}")
-            item.setData(Qt.UserRole, account.id)
+            item.setData(Qt.UserRole, account.id)  # type: ignore[attr-defined]  # type: ignore[attr-defined]
             self.account_list.addItem(item)
             if account.id == selected_account_id:
                 selected_index = index
@@ -385,7 +385,7 @@ class MainWindow(QMainWindow):
         else:
             self.current_account = None
 
-    def account_selected(self, index):
+    def account_selected(self, index: int) -> None:
         """Handle account selection."""
         if index < 0:
             return
@@ -394,7 +394,7 @@ class MainWindow(QMainWindow):
         if not selected_item:
             return
 
-        account_id = selected_item.data(Qt.UserRole)
+        account_id = selected_item.data(Qt.UserRole)  # type: ignore[attr-defined]
         if not account_id:
             return
 
@@ -405,7 +405,7 @@ class MainWindow(QMainWindow):
         self.current_account = account
         self.load_transactions()
 
-    def load_transactions(self):
+    def load_transactions(self) -> None:
         """Load transactions for current account."""
         if not self.current_account:
             return
@@ -436,7 +436,7 @@ class MainWindow(QMainWindow):
         self.transaction_table.setItem(0, 4, QTableWidgetItem(""))
         self.transaction_table.setItem(0, 5, QTableWidgetItem(""))
         opening_balance_item = QTableWidgetItem(self.settings.format_currency(running_balance))
-        opening_balance_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+        opening_balance_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)  # type: ignore[attr-defined]
         self.transaction_table.setItem(0, 6, opening_balance_item)
 
         for i, trans in enumerate(transactions, start=1):
@@ -460,13 +460,13 @@ class MainWindow(QMainWindow):
                 debit_text = self.settings.format_currency(abs(trans.amount))
 
             credit_item = QTableWidgetItem(credit_text)
-            credit_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            credit_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)  # type: ignore[attr-defined]
             if credit_text:  # Only set color if there's a value
                 credit_item.setForeground(QColor(0, 128, 0))  # Dark green for credits
             self.transaction_table.setItem(i, 4, credit_item)
 
             debit_item = QTableWidgetItem(debit_text)
-            debit_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            debit_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)  # type: ignore[attr-defined]
             if debit_text:  # Only set color if there's a value
                 debit_item.setForeground(QColor(200, 0, 0))  # Red for debits
             self.transaction_table.setItem(i, 5, debit_item)
@@ -474,16 +474,18 @@ class MainWindow(QMainWindow):
             running_balance += trans.amount
             balance_formatted = self.settings.format_currency(running_balance)
             balance_item = QTableWidgetItem(balance_formatted)
-            balance_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)
+            balance_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)  # type: ignore[attr-defined]
             self.transaction_table.setItem(i, 6, balance_item)
 
             # Store transaction ID in first column for reference
-            self.transaction_table.item(i, 0).setData(Qt.UserRole, trans.id)
+            item = self.transaction_table.item(i, 0)
+            if item:
+                item.setData(Qt.UserRole, trans.id)  # type: ignore[attr-defined]
 
-    def new_account(self):
+    def new_account(self) -> None:
         """Create a new account."""
         dialog = AccountDialog(self)
-        if dialog.exec() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:  # type: ignore[attr-defined]  # type: ignore[attr-defined]
             account_data = dialog.get_data()
             account = self.service.create_account(
                 name=account_data["name"],
@@ -494,14 +496,14 @@ class MainWindow(QMainWindow):
             self.load_accounts(account.id)
             self.statusBar().showMessage(f"Account '{account_data['name']}' created")
 
-    def edit_account(self):
+    def edit_account(self) -> None:
         """Edit the selected account."""
         if not self.current_account:
             QMessageBox.warning(self, "No Account", "Please select an account to edit.")
             return
 
         dialog = AccountDialog(self, self.current_account)
-        if dialog.exec() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:  # type: ignore[attr-defined]
             account_data = dialog.get_data()
             self.current_account.name = account_data["name"]
             self.current_account.account_type = account_data["type"]
@@ -511,14 +513,17 @@ class MainWindow(QMainWindow):
             self.load_accounts(self.current_account.id)
             self.statusBar().showMessage(f"Account '{account_data['name']}' updated")
 
-    def new_transaction(self):
+    def new_transaction(self) -> None:
         """Create a new transaction."""
         if not self.current_account:
             QMessageBox.warning(self, "No Account", "Please select an account first.")
             return
 
+        if self.current_account is None:
+            return
+
         dialog = TransactionDialog(self, self.service, self.current_account)
-        if dialog.exec() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:  # type: ignore[attr-defined]
             trans_data = dialog.get_data()
             trans = Transaction(
                 account_id=self.current_account.id,
@@ -532,18 +537,24 @@ class MainWindow(QMainWindow):
             self.load_accounts(self.current_account.id)  # Refresh balance and keep selection
             self.statusBar().showMessage("Transaction created")
 
-    def edit_transaction(self):
+    def edit_transaction(self) -> None:
         """Edit the selected transaction."""
         row = self.transaction_table.currentRow()
         if row < 0:
             return
 
-        trans_id = self.transaction_table.item(row, 0).data(Qt.UserRole)
+        item = self.transaction_table.item(row, 0)
+        if not item:
+            return
+
+        trans_id = item.data(Qt.UserRole)  # type: ignore[attr-defined]
         transaction = self.service.get_transaction(trans_id)
 
         if transaction:
+            if self.current_account is None:
+                return
             dialog = TransactionDialog(self, self.service, self.current_account, transaction)
-            if dialog.exec() == QDialog.Accepted:
+            if dialog.exec() == QDialog.Accepted:  # type: ignore[attr-defined]
                 trans_data = dialog.get_data()
                 transaction.date = trans_data["date"]
                 transaction.payee = trans_data["payee"]
@@ -554,7 +565,7 @@ class MainWindow(QMainWindow):
                 self.load_accounts(self.current_account.id)
                 self.statusBar().showMessage("Transaction updated")
 
-    def delete_transaction(self):
+    def delete_transaction(self) -> None:
         """Delete the selected transaction."""
         row = self.transaction_table.currentRow()
         if row < 0:
@@ -565,16 +576,21 @@ class MainWindow(QMainWindow):
             self,
             "Confirm Delete",
             "Are you sure you want to delete this transaction?",
-            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes | QMessageBox.No,  # type: ignore[attr-defined]
         )
 
-        if reply == QMessageBox.Yes:
-            trans_id = self.transaction_table.item(row, 0).data(Qt.UserRole)
+        if reply == QMessageBox.Yes:  # type: ignore[attr-defined]
+            item = self.transaction_table.item(row, 0)
+            if not item:
+                return
+            if self.current_account is None:
+                return
+            trans_id = item.data(Qt.UserRole)  # type: ignore[attr-defined]
             self.service.delete_transaction(trans_id, self.current_account.id)
             self.load_accounts(self.current_account.id)
             self.statusBar().showMessage("Transaction deleted")
 
-    def import_transactions(self):
+    def import_transactions(self) -> None:
         """Import transactions from file."""
         if not self.current_account:
             QMessageBox.warning(self, "No Account", "Please select an account first.")
@@ -610,7 +626,7 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Import Error", f"Error importing file:\n{str(e)}")
 
-    def export_transactions(self):
+    def export_transactions(self) -> None:
         """Export transactions to file."""
         if not self.current_account:
             QMessageBox.warning(self, "No Account", "Please select an account first.")
@@ -642,25 +658,25 @@ class MainWindow(QMainWindow):
         except Exception as e:
             QMessageBox.critical(self, "Export Error", f"Error exporting file:\n{str(e)}")
 
-    def manage_categories(self):
+    def manage_categories(self) -> None:
         """Open category management dialog."""
         dialog = CategoryDialog(self, self.service)
         dialog.exec()
 
-    def manage_payees(self):
+    def manage_payees(self) -> None:
         """Open payee management dialog."""
         dialog = PayeeDialog(self, self.service)
         dialog.exec()
 
-    def show_settings(self):
+    def show_settings(self) -> None:
         """Open settings dialog."""
         dialog = SettingsDialog(self, self.settings)
-        if dialog.exec() == QDialog.Accepted:
+        if dialog.exec() == QDialog.Accepted:  # type: ignore[attr-defined]
             self.settings.save()
             # Refresh display with new currency
             self.load_accounts(self.current_account.id if self.current_account else None)
 
-    def show_about(self):
+    def show_about(self) -> None:
         """Show about dialog."""
         QMessageBox.about(
             self,
@@ -670,12 +686,12 @@ class MainWindow(QMainWindow):
             "Supports QIF, OFX, and CSV import/export.",
         )
 
-    def closeEvent(self, event):
+    def closeEvent(self, event: Any) -> None:
         """Handle window close."""
         self.service.close()
         event.accept()
 
-    def _update_window_title(self):
+    def _update_window_title(self) -> None:
         """Update window title to show current database."""
         db_name = self.current_db_path.name
         db_dir = self.current_db_path.parent
@@ -690,7 +706,7 @@ class MainWindow(QMainWindow):
             except ValueError:
                 self.setWindowTitle(f"{Config.APP_NAME} - {self.current_db_path}")
 
-    def _add_to_recent_databases(self, db_path: Path):
+    def _add_to_recent_databases(self, db_path: Path) -> None:
         """Add database to recent list."""
         recent = self.settings.get("recent_databases", [])
         if not isinstance(recent, list):
@@ -705,7 +721,7 @@ class MainWindow(QMainWindow):
         self.settings.set("recent_databases", recent)
         self.settings.save()
 
-    def _update_recent_databases_menu(self):
+    def _update_recent_databases_menu(self) -> None:
         """Update the recent databases menu."""
         self.recent_menu.clear()
         recent = self.settings.get("recent_databases", [])
@@ -734,11 +750,11 @@ class MainWindow(QMainWindow):
             action = QAction(display_name, self)
             action.setData(db_path_str)
             action.triggered.connect(
-                lambda checked, p=db_path_str: self._open_database_path(Path(p))
+                lambda checked=False, p=db_path_str: self._open_database_path(Path(p))
             )
             self.recent_menu.addAction(action)
 
-    def new_database(self):
+    def new_database(self) -> None:
         """Create a new database file."""
         file_path, _ = QFileDialog.getSaveFileName(
             self,
@@ -758,9 +774,9 @@ class MainWindow(QMainWindow):
                 self,
                 "File Exists",
                 f"Database file already exists. Open it instead?",
-                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes | QMessageBox.No,  # type: ignore[attr-defined]
             )
-            if reply == QMessageBox.Yes:
+            if reply == QMessageBox.Yes:  # type: ignore[attr-defined]
                 self._open_database_path(db_path)
             return
 
@@ -768,7 +784,7 @@ class MainWindow(QMainWindow):
         self._open_database_path(db_path)
         self.statusBar().showMessage(f"Created new database: {db_path.name}")
 
-    def open_database(self):
+    def open_database(self) -> None:
         """Open an existing database file."""
         file_path, _ = QFileDialog.getOpenFileName(
             self,
@@ -782,7 +798,7 @@ class MainWindow(QMainWindow):
 
         self._open_database_path(Path(file_path))
 
-    def _open_database_path(self, db_path: Path):
+    def _open_database_path(self, db_path: Path) -> None:
         """Open a database at the given path."""
         if not db_path.exists():
             # Will be created by Storage
@@ -808,12 +824,12 @@ class MainWindow(QMainWindow):
 class AccountDialog(QDialog):
     """Dialog for creating/editing accounts."""
 
-    def __init__(self, parent, account: Optional[Account] = None):
+    def __init__(self, parent: Any, account: Optional[Account] = None) -> None:
         super().__init__(parent)
         self.account = account
         self.init_ui()
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         """Initialize dialog UI."""
         self.setWindowTitle("Account" if not self.account else "Edit Account")
         self.setModal(True)
@@ -857,7 +873,7 @@ class AccountDialog(QDialog):
         layout.addRow("Opening Balance:", self.balance_spin)
 
         # Buttons
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)  # type: ignore[attr-defined]
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
@@ -867,13 +883,13 @@ class AccountDialog(QDialog):
         # Set initial visibility
         self._on_account_type_changed()
 
-    def _on_account_type_changed(self):
+    def _on_account_type_changed(self) -> None:
         """Show/hide savings subtype based on account type."""
         is_savings = self.type_combo.currentData() == AccountType.SAVINGS
         self.subtype_label.setVisible(is_savings)
         self.subtype_combo.setVisible(is_savings)
 
-    def get_data(self):
+    def get_data(self) -> dict[str, Any]:
         """Get dialog data."""
         savings_subtype = None
         if self.type_combo.currentData() == AccountType.SAVINGS:
@@ -892,18 +908,18 @@ class TransactionDialog(QDialog):
 
     def __init__(
         self,
-        parent,
+        parent: Any,
         service: MoneyService,
         account: Account,
         transaction: Optional[Transaction] = None,
-    ):
+    ) -> None:
         super().__init__(parent)
         self.service = service
         self.account = account
         self.transaction = transaction
         self.init_ui()
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         """Initialize dialog UI."""
         self.setWindowTitle("New Transaction" if not self.transaction else "Edit Transaction")
         self.setModal(True)
@@ -951,7 +967,7 @@ class TransactionDialog(QDialog):
         # Payee - editable combo box with predefined and historical payees
         self.payee_combo = QComboBox()
         self.payee_combo.setEditable(True)
-        self.payee_combo.setInsertPolicy(QComboBox.NoInsert)
+        self.payee_combo.setInsertPolicy(QComboBox.NoInsert)  # type: ignore[attr-defined]
 
         # Load all payees (predefined + historical from transactions)
         all_payees = self.service.get_all_payees()
@@ -991,14 +1007,14 @@ class TransactionDialog(QDialog):
         layout.addRow("Memo:", self.memo_edit)
 
         # Buttons
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)  # type: ignore[attr-defined]
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addRow(buttons)
 
         self.setLayout(layout)
 
-    def _on_transaction_type_changed(self):
+    def _on_transaction_type_changed(self) -> None:
         """Handle transaction type change to auto-populate fields."""
         trans_type = self.type_combo.currentData()
 
@@ -1016,7 +1032,7 @@ class TransactionDialog(QDialog):
             if self.payee_combo.currentText() in ["Interest Payment", "Dividend Payment"]:
                 self.payee_combo.clearEditText()
 
-    def get_data(self):
+    def get_data(self) -> dict[str, Any]:
         """Get dialog data."""
         qdate = self.date_edit.date()
         amount = Decimal(str(self.amount_spin.value()))
@@ -1038,13 +1054,13 @@ class TransactionDialog(QDialog):
 class CategoryDialog(QDialog):
     """Dialog for managing categories."""
 
-    def __init__(self, parent, service: MoneyService):
+    def __init__(self, parent: Any, service: MoneyService) -> None:
         super().__init__(parent)
         self.service = service
         self.init_ui()
         self.load_categories()
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         """Initialize dialog UI."""
         self.setWindowTitle("Categories")
         self.setModal(True)
@@ -1073,7 +1089,7 @@ class CategoryDialog(QDialog):
 
         self.setLayout(layout)
 
-    def load_categories(self):
+    def load_categories(self) -> None:
         """Load categories into list."""
         self.category_list.clear()
         categories = self.service.get_all_categories()
@@ -1081,14 +1097,16 @@ class CategoryDialog(QDialog):
             income_indicator = "(Income)" if cat.is_income else "(Expense)"
             self.category_list.addItem(f"{cat.name} {income_indicator}")
 
-    def new_category(self):
+    def new_category(self) -> None:
         """Create new category."""
-        name, ok = QLineEdit.getText(self, "New Category", "Category name:")
+        from PySide6.QtWidgets import QInputDialog
+
+        name, ok = QInputDialog.getText(self, "New Category", "Category name:")
         if ok and name:
             self.service.create_category(name)
             self.load_categories()
 
-    def delete_category(self):
+    def delete_category(self) -> None:
         """Delete selected category."""
         row = self.category_list.currentRow()
         if row < 0:
@@ -1101,9 +1119,9 @@ class CategoryDialog(QDialog):
                 self,
                 "Confirm Delete",
                 f"Delete category '{category.name}'?",
-                QMessageBox.Yes | QMessageBox.No,
+                QMessageBox.Yes | QMessageBox.No,  # type: ignore[attr-defined]
             )
-            if reply == QMessageBox.Yes:
+            if reply == QMessageBox.Yes:  # type: ignore[attr-defined]
                 self.service.delete_category(category.id)
                 self.load_categories()
 
@@ -1111,13 +1129,13 @@ class CategoryDialog(QDialog):
 class PayeeDialog(QDialog):
     """Dialog for managing predefined payees."""
 
-    def __init__(self, parent, service: MoneyService):
+    def __init__(self, parent: Any, service: MoneyService) -> None:
         super().__init__(parent)
         self.service = service
         self.init_ui()
         self.load_payees()
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         """Initialize dialog UI."""
         self.setWindowTitle("Manage Payees")
         self.setModal(True)
@@ -1151,14 +1169,14 @@ class PayeeDialog(QDialog):
 
         self.setLayout(layout)
 
-    def load_payees(self):
+    def load_payees(self) -> None:
         """Load predefined payees into list."""
         self.payee_list.clear()
         payees = self.service.get_predefined_payees()
         for payee in payees:
             self.payee_list.addItem(payee)
 
-    def new_payee(self):
+    def new_payee(self) -> None:
         """Add new predefined payee."""
         from PySide6.QtWidgets import QInputDialog
 
@@ -1167,7 +1185,7 @@ class PayeeDialog(QDialog):
             self.service.add_payee(name.strip())
             self.load_payees()
 
-    def delete_payee(self):
+    def delete_payee(self) -> None:
         """Delete selected predefined payee."""
         current_item = self.payee_list.currentItem()
         if not current_item:
@@ -1177,10 +1195,10 @@ class PayeeDialog(QDialog):
         reply = QMessageBox.question(
             self,
             "Confirm Delete",
-            f"Delete payee '{payee_name}'?\\n\\nNote: This only removes it from the predefined list.\\nExisting transactions will not be affected.",
-            QMessageBox.Yes | QMessageBox.No,
+            f"Delete payee '{payee_name}'?\n\nNote: This only removes it from the predefined list.\nExisting transactions will not be affected.",
+            QMessageBox.Yes | QMessageBox.No,  # type: ignore[attr-defined]
         )
-        if reply == QMessageBox.Yes:
+        if reply == QMessageBox.Yes:  # type: ignore[attr-defined]
             self.service.delete_payee(payee_name)
             self.load_payees()
 
@@ -1188,12 +1206,12 @@ class PayeeDialog(QDialog):
 class SettingsDialog(QDialog):
     """Dialog for application settings."""
 
-    def __init__(self, parent, settings):
+    def __init__(self, parent: Any, settings: Any) -> None:
         super().__init__(parent)
         self.settings = settings
         self.init_ui()
 
-    def init_ui(self):
+    def init_ui(self) -> None:
         """Initialize dialog UI."""
         self.setWindowTitle("Settings")
         self.setModal(True)
@@ -1266,14 +1284,14 @@ class SettingsDialog(QDialog):
 
         # Buttons
         layout.addSpacing(10)
-        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)  # type: ignore[attr-defined]
         buttons.accepted.connect(self.accept)
         buttons.rejected.connect(self.reject)
         layout.addWidget(buttons)
 
         self.setLayout(layout)
 
-    def update_preview(self):
+    def update_preview(self) -> None:
         """Update the preview label."""
         from datetime import date
 
@@ -1307,7 +1325,7 @@ class SettingsDialog(QDialog):
         preview_text = f"Amount: {currency_str}\nDate: {date_str}"
         self.preview_label.setText(preview_text)
 
-    def accept(self):
+    def accept(self) -> None:
         """Save settings and close."""
         # Save currency
         currency_code = self.currency_combo.currentData()
@@ -1323,7 +1341,7 @@ class SettingsDialog(QDialog):
         super().accept()
 
 
-def QLineEdit_getText(parent, title, label):
+def QLineEdit_getText(parent: Any, title: str, label: str) -> tuple[str, bool]:
     """Simple helper for text input dialog."""
     from PySide6.QtWidgets import QInputDialog
 
@@ -1331,4 +1349,4 @@ def QLineEdit_getText(parent, title, label):
 
 
 # Monkey patch the helper
-QLineEdit.getText = staticmethod(QLineEdit_getText)
+QLineEdit.getText = staticmethod(QLineEdit_getText)  # type: ignore[attr-defined]

@@ -5,7 +5,7 @@ import sqlite3
 from datetime import date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, List, Optional
 
 from .models import (
     Account,
@@ -24,10 +24,10 @@ class Storage:
     def __init__(self, db_path: Path):
         """Initialize storage with database path."""
         self.db_path = db_path
-        self.conn: Optional[sqlite3.Connection] = None
+        self.conn: sqlite3.Connection
         self._ensure_database()
 
-    def _ensure_database(self):
+    def _ensure_database(self) -> None:
         """Create database and tables if they don't exist."""
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self.conn = sqlite3.connect(str(self.db_path))
@@ -35,7 +35,7 @@ class Storage:
         self._create_tables()
         self._migrate_schema()
 
-    def _create_tables(self):
+    def _create_tables(self) -> None:
         """Create database schema."""
         cursor = self.conn.cursor()
 
@@ -133,7 +133,7 @@ class Storage:
         self.conn.commit()
         self._seed_default_categories()
 
-    def _migrate_schema(self):
+    def _migrate_schema(self) -> None:
         """Migrate database schema to latest version."""
         cursor = self.conn.cursor()
 
@@ -146,7 +146,7 @@ class Storage:
             cursor.execute("ALTER TABLE accounts ADD COLUMN savings_subtype TEXT")
             self.conn.commit()
 
-    def _seed_default_categories(self):
+    def _seed_default_categories(self) -> None:
         """Create default categories if none exist."""
         cursor = self.conn.cursor()
         count = cursor.execute("SELECT COUNT(*) FROM categories").fetchone()[0]
@@ -179,14 +179,15 @@ class Storage:
         for cat in default_categories:
             self.save_category(cat)
 
-    def close(self):
+    def close(self) -> None:
         """Close database connection."""
         if self.conn:
             self.conn.close()
 
     # Account operations
-    def save_account(self, account: Account):
+    def save_account(self, account: Account) -> None:
         """Save or update an account."""
+
         cursor = self.conn.cursor()
 
         # Handle savings_subtype
@@ -235,13 +236,13 @@ class Storage:
         rows = cursor.execute(query).fetchall()
         return [self._row_to_account(row) for row in rows]
 
-    def delete_account(self, account_id: str):
+    def delete_account(self, account_id: str) -> None:
         """Delete an account."""
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM accounts WHERE id = ?", (account_id,))
         self.conn.commit()
 
-    def _row_to_account(self, row) -> Account:
+    def _row_to_account(self, row: Any) -> Account:
         """Convert database row to Account object."""
         account_type_value = row["account_type"]
         if account_type_value == "Checking":
@@ -271,7 +272,7 @@ class Storage:
         )
 
     # Category operations
-    def save_category(self, category: Category):
+    def save_category(self, category: Category) -> None:
         """Save or update a category."""
         cursor = self.conn.cursor()
         cursor.execute(
@@ -305,13 +306,13 @@ class Storage:
         rows = cursor.execute("SELECT * FROM categories ORDER BY name").fetchall()
         return [self._row_to_category(row) for row in rows]
 
-    def delete_category(self, category_id: str):
+    def delete_category(self, category_id: str) -> None:
         """Delete a category."""
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM categories WHERE id = ?", (category_id,))
         self.conn.commit()
 
-    def _row_to_category(self, row) -> Category:
+    def _row_to_category(self, row: Any) -> Category:
         """Convert database row to Category object."""
         return Category(
             id=row["id"],
@@ -323,7 +324,7 @@ class Storage:
         )
 
     # Transaction operations
-    def save_transaction(self, transaction: Transaction):
+    def save_transaction(self, transaction: Transaction) -> None:
         """Save or update a transaction with splits."""
         cursor = self.conn.cursor()
 
@@ -412,7 +413,7 @@ class Storage:
 
         return transactions
 
-    def delete_transaction(self, transaction_id: str, account_id: str):
+    def delete_transaction(self, transaction_id: str, account_id: str) -> None:
         """Delete a transaction."""
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM splits WHERE transaction_id = ?", (transaction_id,))
@@ -420,7 +421,7 @@ class Storage:
         self.conn.commit()
         self._update_account_balance(account_id)
 
-    def _row_to_transaction(self, row) -> Transaction:
+    def _row_to_transaction(self, row: Any) -> Transaction:
         """Convert database row to Transaction object."""
         return Transaction(
             id=row["id"],
@@ -437,7 +438,7 @@ class Storage:
             modified_date=datetime.fromisoformat(row["modified_date"]),
         )
 
-    def _row_to_split(self, row) -> Split:
+    def _row_to_split(self, row: Any) -> Split:
         """Convert database row to Split object."""
         return Split(
             id=row["id"],
@@ -464,7 +465,7 @@ class Storage:
 
         return sorted(list(payees))
 
-    def add_payee(self, name: str):
+    def add_payee(self, name: str) -> None:
         """Add a predefined payee."""
         from uuid import uuid4
         from datetime import datetime
@@ -486,7 +487,7 @@ class Storage:
             # Payee already exists
             pass
 
-    def delete_payee(self, name: str):
+    def delete_payee(self, name: str) -> None:
         """Delete a predefined payee."""
         cursor = self.conn.cursor()
         cursor.execute("DELETE FROM payees WHERE name = ?", (name,))
@@ -498,7 +499,7 @@ class Storage:
         rows = cursor.execute("SELECT name FROM payees ORDER BY name").fetchall()
         return [row["name"] for row in rows]
 
-    def _update_account_balance(self, account_id: str):
+    def _update_account_balance(self, account_id: str) -> None:
         """Recalculate account balance from transactions."""
         cursor = self.conn.cursor()
 

@@ -4,7 +4,7 @@ from dataclasses import dataclass, field
 from datetime import date as Date, datetime as DateTime
 from decimal import Decimal
 from enum import Enum
-from typing import Optional, List
+from typing import Optional, List, Dict
 from uuid import uuid4
 
 
@@ -48,7 +48,7 @@ class Category:
     is_tax_related: bool = False
     description: str = ""
 
-    def full_name(self, categories_dict: dict = None) -> str:
+    def full_name(self, categories_dict: Optional[Dict[str, "Category"]] = None) -> str:
         """Get full category name including parent (e.g., 'Auto:Gas')."""
         if not self.parent_id or not categories_dict:
             return self.name
@@ -74,7 +74,7 @@ class Account:
     created_date: Date = field(default_factory=Date.today)
     closed: bool = False
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Ensure balance is Decimal."""
         if not isinstance(self.opening_balance, Decimal):
             self.opening_balance = Decimal(str(self.opening_balance))
@@ -92,7 +92,7 @@ class Split:
     amount: Decimal = Decimal("0.00")
     memo: str = ""
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Ensure amount is Decimal."""
         if not isinstance(self.amount, Decimal):
             self.amount = Decimal(str(self.amount))
@@ -119,7 +119,7 @@ class Transaction:
     created_date: DateTime = field(default_factory=DateTime.now)
     modified_date: DateTime = field(default_factory=DateTime.now)
 
-    def __post_init__(self):
+    def __post_init__(self) -> None:
         """Ensure amount is Decimal."""
         if not isinstance(self.amount, Decimal):
             self.amount = Decimal(str(self.amount))

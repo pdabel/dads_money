@@ -53,9 +53,9 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e ".[dev]"
 
-      - name: Run linting
+      - name: Run type checking
         run: |
-          python -m mypy src/dads_money --strict --no-implicit-optional --warn-unused-ignores || true
+          python -m mypy src/dads_money
 
       - name: Check code formatting
         run: |

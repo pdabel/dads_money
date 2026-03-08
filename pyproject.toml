@@ -53,6 +53,7 @@ omit = [
     "*/__pycache__/*",
     "*/site-packages/*",
     "src/dads_money/app.py",
+    "src/dads_money/ui.py",
 ]
 
 [tool.coverage.report]

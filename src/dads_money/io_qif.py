@@ -1,6 +1,6 @@
 """QIF (Quicken Interchange Format) import/export."""
 
-from datetime import datetime
+from datetime import datetime, date
 from decimal import Decimal
 from io import StringIO
 from typing import List, TextIO
@@ -98,7 +98,7 @@ class QIFParser:
         return transactions
 
     @staticmethod
-    def _parse_date(date_str: str) -> datetime.date:
+    def _parse_date(date_str: str) -> date:
         """Parse QIF date format."""
         # QIF supports multiple date formats: MM/DD/YYYY, MM/DD/YY, MM-DD-YYYY, etc.
         date_str = date_str.replace("'", "")  # Remove apostrophes
@@ -108,7 +108,6 @@ class QIFParser:
                 return datetime.strptime(date_str, fmt).date()
             except ValueError:
                 continue
-
         # Default to today if we can't parse
         return datetime.now().date()
 
@@ -117,13 +116,15 @@ class QIFWriter:
     """Write transactions to QIF format."""
 
     @staticmethod
-    def write_file(file_path: str, transactions: List[Transaction], account_type: str = "Bank"):
+    def write_file(
+        file_path: str, transactions: List[Transaction], account_type: str = "Bank"
+    ) -> None:
         """Write transactions to QIF file."""
         with open(file_path, "w", encoding="utf-8") as f:
             QIFWriter.write(f, transactions, account_type)
 
     @staticmethod
-    def write(file: TextIO, transactions: List[Transaction], account_type: str = "Bank"):
+    def write(file: TextIO, transactions: List[Transaction], account_type: str = "Bank") -> None:
         """Write transactions to QIF format."""
         file.write(f"!Type:{account_type}\n")
 

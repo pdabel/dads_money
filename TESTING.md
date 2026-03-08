@@ -30,6 +30,11 @@ Why 70%?
 - ✅ Realistic for a production application with a GUI component
 - ✅ UI layer (1,279 lines) excluded—difficult and diminishing returns
 
+**Coverage Policy Note (CI-aligned):**
+- The coverage threshold applies to core logic modules (storage, services, models, import/export, settings, config).
+- `src/dads_money/ui.py` is intentionally excluded from threshold calculations because UI is validated via manual/integration workflows rather than widget-level unit tests.
+- This exclusion is enforced in [pyproject.toml](pyproject.toml) under `[tool.coverage.run].omit`.
+
 ### Coverage by Module (Target State)
 
 | Module | Lines | Coverage Goal | Priority |
@@ -44,7 +49,7 @@ Why 70%?
 | `config.py` | 38 | 75%+ | Medium |
 | `ui.py` | 1,278 | N/A* | N/A |
 
-*UI layer testing is excluded from coverage requirements due to complexity of GUI testing.
+*UI layer testing is excluded from coverage requirements due to complexity and low ROI of widget-level GUI testing.
 
 ## Running Tests
 

@@ -1,8 +1,9 @@
 """Application services layer."""
 
 from datetime import datetime
+from decimal import Decimal
 from pathlib import Path
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from .config import Config
 from .io_csv import CSVParser, CSVWriter
@@ -20,23 +21,29 @@ class MoneyService:
         if db_path is None:
             db_path = Config.get_database_path()
         self.storage = Storage(db_path)
-        self._categories_cache = None
+        self._categories_cache: Optional[List[Category]] = None
 
-    def close(self):
+    def close(self) -> None:
         """Close the service and underlying storage."""
         self.storage.close()
 
     # Account operations
     def create_account(
-        self, name: str, account_type, opening_balance: float = 0.0, savings_subtype=None
+        self,
+        name: str,
+        account_type: Any,
+        opening_balance: float = 0.0,
+        savings_subtype: Any = None,
     ) -> Account:
         """Create a new account."""
+
+        balance = Decimal(str(opening_balance))
         account = Account(
             name=name,
             account_type=account_type,
             savings_subtype=savings_subtype,
-            opening_balance=opening_balance,
-            current_balance=opening_balance,
+            opening_balance=balance,
+            current_balance=balance,
         )
         self.storage.save_account(account)
         return account
@@ -49,11 +56,11 @@ class MoneyService:
         """Get all accounts."""
         return self.storage.get_all_accounts(include_closed)
 
-    def update_account(self, account: Account):
+    def update_account(self, account: Account) -> None:
         """Update an existing account."""
         self.storage.save_account(account)
 
-    def delete_account(self, account_id: str):
+    def delete_account(self, account_id: str) -> None:
         """Delete an account."""
         self.storage.delete_account(account_id)
 
@@ -75,18 +82,19 @@ class MoneyService:
         """Get all categories (cached)."""
         if self._categories_cache is None:
             self._categories_cache = self.storage.get_all_categories()
+        assert self._categories_cache is not None
         return self._categories_cache
 
-    def get_categories_dict(self) -> dict:
+    def get_categories_dict(self) -> Dict[str, Category]:
         """Get categories as a dictionary keyed by ID."""
         return {cat.id: cat for cat in self.get_all_categories()}
 
-    def update_category(self, category: Category):
+    def update_category(self, category: Category) -> None:
         """Update an existing category."""
         self.storage.save_category(category)
         self._categories_cache = None
 
-    def delete_category(self, category_id: str):
+    def delete_category(self, category_id: str) -> None:
         """Delete a category."""
         self.storage.delete_category(category_id)
         self._categories_cache = None
@@ -95,12 +103,12 @@ class MoneyService:
     def create_transaction(
         self,
         account_id: str,
-        date,
+        date: Any,
         amount: float,
         payee: str = "",
         memo: str = "",
         check_number: str = "",
-        status=None,
+        status: Any = None,
         category_id: Optional[str] = None,
     ) -> Transaction:
         """Create a new transaction."""
@@ -109,7 +117,7 @@ class MoneyService:
         transaction = Transaction(
             account_id=account_id,
             date=date,
-            amount=amount,
+            amount=Decimal(str(amount)),
             payee=payee,
             memo=memo,
             check_number=check_number,
@@ -127,12 +135,12 @@ class MoneyService:
         """Get all transactions for an account."""
         return self.storage.get_transactions_for_account(account_id)
 
-    def update_transaction(self, transaction: Transaction):
+    def update_transaction(self, transaction: Transaction) -> None:
         """Update an existing transaction."""
         transaction.modified_date = datetime.now()
         self.storage.save_transaction(transaction)
 
-    def delete_transaction(self, transaction_id: str, account_id: str):
+    def delete_transaction(self, transaction_id: str, account_id: str) -> None:
         """Delete a transaction."""
         self.storage.delete_transaction(transaction_id, account_id)
 
@@ -147,10 +155,12 @@ class MoneyService:
             count += 1
         return count
 
-    def export_qif(self, file_path: str, account_id: str):
+    def export_qif(self, file_path: str, account_id: str) -> None:
         """Export account transactions to QIF file."""
         transactions = self.get_transactions_for_account(account_id)
         account = self.get_account(account_id)
+        if not account:
+            raise ValueError(f"Account {account_id} not found")
 
         # Determine QIF account type
         account_type_map = {
@@ -174,7 +184,7 @@ class MoneyService:
             count += 1
         return count
 
-    def export_csv(self, file_path: str, account_id: str):
+    def export_csv(self, file_path: str, account_id: str) -> None:
         """Export account transactions to CSV file."""
         transactions = self.get_transactions_for_account(account_id)
         CSVWriter.write_file(file_path, transactions)
@@ -197,11 +207,11 @@ class MoneyService:
         """Get all payees (both predefined and from transactions)."""
         return self.storage.get_all_payees()
 
-    def add_payee(self, name: str):
+    def add_payee(self, name: str) -> None:
         """Add a predefined payee."""
         self.storage.add_payee(name)
 
-    def delete_payee(self, name: str):
+    def delete_payee(self, name: str) -> None:
         """Delete a predefined payee."""
         self.storage.delete_payee(name)
 

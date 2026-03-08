@@ -2,7 +2,7 @@
 
 import json
 from pathlib import Path
-from typing import Optional
+from typing import Any, Optional
 
 from .config import Config
 
@@ -43,13 +43,13 @@ class Settings:
         "window_height": 700,
     }
 
-    def __init__(self):
+    def __init__(self) -> None:
         """Initialize settings."""
         self.settings_file = Config.get_user_data_dir() / "settings.json"
         self._settings = self.DEFAULT_SETTINGS.copy()
         self.load()
 
-    def load(self):
+    def load(self) -> None:
         """Load settings from file."""
         if self.settings_file.exists():
             try:
@@ -59,7 +59,7 @@ class Settings:
             except Exception as e:
                 print(f"Error loading settings: {e}")
 
-    def save(self):
+    def save(self) -> None:
         """Save settings to file."""
         try:
             self.settings_file.parent.mkdir(parents=True, exist_ok=True)
@@ -68,11 +68,11 @@ class Settings:
         except Exception as e:
             print(f"Error saving settings: {e}")
 
-    def get(self, key: str, default=None):
+    def get(self, key: str, default: Any = None) -> Any:
         """Get a setting value."""
         return self._settings.get(key, default)
 
-    def set(self, key: str, value):
+    def set(self, key: str, value: Any) -> None:
         """Set a setting value."""
         self._settings[key] = value
 
@@ -80,10 +80,11 @@ class Settings:
     @property
     def currency_code(self) -> str:
         """Get the currency code."""
-        return self._settings.get("currency_code", "USD")
+        code = self._settings.get("currency_code", "USD")
+        return str(code)
 
     @currency_code.setter
-    def currency_code(self, code: str):
+    def currency_code(self, code: str) -> None:
         """Set the currency code."""
         if code in CURRENCIES:
             self._settings["currency_code"] = code
@@ -92,21 +93,25 @@ class Settings:
     def currency_symbol(self) -> str:
         """Get the currency symbol."""
         code = self.currency_code
-        return CURRENCIES.get(code, CURRENCIES["USD"])["symbol"]
+        currency_data = CURRENCIES.get(code, CURRENCIES["USD"])
+        return str(currency_data["symbol"])
 
     @property
     def currency_name(self) -> str:
         """Get the currency name."""
         code = self.currency_code
-        return CURRENCIES.get(code, CURRENCIES["USD"])["name"]
+        currency_data = CURRENCIES.get(code, CURRENCIES["USD"])
+        return str(currency_data["name"])
 
     @property
     def decimal_places(self) -> int:
         """Get the number of decimal places for the currency."""
         code = self.currency_code
-        return CURRENCIES.get(code, CURRENCIES["USD"])["decimal_places"]
+        currency_data = CURRENCIES.get(code, CURRENCIES["USD"])
+        value = currency_data["decimal_places"]
+        return int(value) if isinstance(value, (int, str)) else 2
 
-    def format_currency(self, amount, include_symbol: bool = True) -> str:
+    def format_currency(self, amount: Any, include_symbol: bool = True) -> str:
         """Format an amount as currency."""
         symbol = self.currency_symbol if include_symbol else ""
         decimal_places = self.decimal_places
@@ -128,10 +133,11 @@ class Settings:
     @property
     def date_format(self) -> str:
         """Get the date format string."""
-        return self._settings.get("date_format", "%m/%d/%Y")
+        fmt = self._settings.get("date_format", "%m/%d/%Y")
+        return str(fmt)
 
     @date_format.setter
-    def date_format(self, fmt: str):
+    def date_format(self, fmt: str) -> None:
         """Set the date format string."""
         self._settings["date_format"] = fmt
 
