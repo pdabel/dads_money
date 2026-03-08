@@ -26,17 +26,19 @@ class MainWindow(QMainWindow):
     """Main application window with Money 3.0 style interface."""
     REGISTER_COLUMNS = ["Date", "Check #", "Payee", "Memo", "Status", "Credit", "Debit", "Balance"]
     
-    def __init__(self):
+    def __init__(self, db_path: Optional[Path] = None):
         super().__init__()
-        self.service = MoneyService()
         self.settings = get_settings()
+        self.current_db_path = db_path if db_path else Config.get_database_path()
+        self.service = MoneyService(self.current_db_path)
         self.current_account: Optional[Account] = None
         self.init_ui()
         self.load_accounts()
+        self._add_to_recent_databases(self.current_db_path)
+        self._update_window_title()
     
     def init_ui(self):
         """Initialize the user interface."""
-        self.setWindowTitle(f"{Config.APP_NAME} - Microsoft Money 3.0 Style")
         self.setGeometry(100, 100, 1200, 700)
         
         # Create menu bar
@@ -76,6 +78,19 @@ class MainWindow(QMainWindow):
         
         # File menu
         file_menu = menubar.addMenu("&File")
+        
+        new_db_action = QAction("&New Database...", self)
+        new_db_action.triggered.connect(self.new_database)
+        file_menu.addAction(new_db_action)
+        
+        open_db_action = QAction("&Open Database...", self)
+        open_db_action.triggered.connect(self.open_database)
+        file_menu.addAction(open_db_action)
+        
+        self.recent_menu = file_menu.addMenu("Recent &Databases")
+        self._update_recent_databases_menu()
+        
+        file_menu.addSeparator()
         
         new_account_action = QAction("&New Account...", self)
         new_account_action.triggered.connect(self.new_account)
@@ -592,6 +607,130 @@ class MainWindow(QMainWindow):
         """Handle window close."""
         self.service.close()
         event.accept()
+    
+    def _update_window_title(self):
+        """Update window title to show current database."""
+        db_name = self.current_db_path.name
+        db_dir = self.current_db_path.parent
+        if db_dir == Config.get_user_data_dir():
+            # Default location, just show filename
+            self.setWindowTitle(f"{Config.APP_NAME} - {db_name}")
+        else:
+            # Custom location, show relative or full path
+            try:
+                rel_path = self.current_db_path.relative_to(Path.home())
+                self.setWindowTitle(f"{Config.APP_NAME} - ~/{rel_path}")
+            except ValueError:
+                self.setWindowTitle(f"{Config.APP_NAME} - {self.current_db_path}")
+    
+    def _add_to_recent_databases(self, db_path: Path):
+        """Add database to recent list."""
+        recent = self.settings.get("recent_databases", [])
+        if not isinstance(recent, list):
+            recent = []
+        
+        db_str = str(db_path.resolve())
+        if db_str in recent:
+            recent.remove(db_str)
+        recent.insert(0, db_str)
+        recent = recent[:10]  # Keep only 10 most recent
+        
+        self.settings.set("recent_databases", recent)
+        self.settings.save()
+    
+    def _update_recent_databases_menu(self):
+        """Update the recent databases menu."""
+        self.recent_menu.clear()
+        recent = self.settings.get("recent_databases", [])
+        
+        if not recent:
+            no_recent = QAction("(No recent databases)", self)
+            no_recent.setEnabled(False)
+            self.recent_menu.addAction(no_recent)
+            return
+        
+        for db_path_str in recent:
+            db_path = Path(db_path_str)
+            if not db_path.exists():
+                continue
+            
+            # Create display name
+            if db_path.parent == Config.get_user_data_dir():
+                display_name = db_path.name
+            else:
+                try:
+                    rel_path = db_path.relative_to(Path.home())
+                    display_name = f"~/{rel_path}"
+                except ValueError:
+                    display_name = str(db_path)
+            
+            action = QAction(display_name, self)
+            action.setData(db_path_str)
+            action.triggered.connect(lambda checked, p=db_path_str: self._open_database_path(Path(p)))
+            self.recent_menu.addAction(action)
+    
+    def new_database(self):
+        """Create a new database file."""
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "New Database",
+            str(Path.home() / "accounts.db"),
+            "Database Files (*.db);;All Files (*.*)"
+        )
+        
+        if not file_path:
+            return
+        
+        db_path = Path(file_path)
+        
+        # Check if file exists
+        if db_path.exists():
+            reply = QMessageBox.question(
+                self, "File Exists",
+                f"Database file already exists. Open it instead?",
+                QMessageBox.Yes | QMessageBox.No
+            )
+            if reply == QMessageBox.Yes:
+                self._open_database_path(db_path)
+            return
+        
+        # Create new database by opening it
+        self._open_database_path(db_path)
+        self.statusBar().showMessage(f"Created new database: {db_path.name}")
+    
+    def open_database(self):
+        """Open an existing database file."""
+        file_path, _ = QFileDialog.getOpenFileName(
+            self, "Open Database",
+            str(Config.get_user_data_dir()),
+            "Database Files (*.db);;All Files (*.*)"
+        )
+        
+        if not file_path:
+            return
+        
+        self._open_database_path(Path(file_path))
+    
+    def _open_database_path(self, db_path: Path):
+        """Open a database at the given path."""
+        if not db_path.exists():
+            # Will be created by Storage
+            pass
+        
+        # Close current service
+        self.service.close()
+        
+        # Open new database
+        self.current_db_path = db_path
+        self.service = MoneyService(self.current_db_path)
+        self.current_account = None
+        
+        # Reload UI
+        self.load_accounts()
+        self._add_to_recent_databases(db_path)
+        self._update_recent_databases_menu()
+        self._update_window_title()
+        
+        self.statusBar().showMessage(f"Opened database: {db_path.name}")
 
 
 class AccountDialog(QDialog):
