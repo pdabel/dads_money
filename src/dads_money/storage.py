@@ -15,6 +15,11 @@ from .models import (
     Split,
     Transaction,
     TransactionStatus,
+    Security,
+    SecurityType,
+    SecurityPrice,
+    InvestmentTransaction,
+    InvestmentTransactionType,
 )
 
 
@@ -124,11 +129,68 @@ class Storage:
         """
         )
 
+        # Securities table
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS securities (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                ticker_symbol TEXT,
+                security_type TEXT NOT NULL,
+                notes TEXT
+            )
+        """
+        )
+
+        # Security prices table
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS security_prices (
+                id TEXT PRIMARY KEY,
+                security_id TEXT NOT NULL,
+                date TEXT NOT NULL,
+                price TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'manual',
+                FOREIGN KEY (security_id) REFERENCES securities(id) ON DELETE CASCADE,
+                UNIQUE (security_id, date)
+            )
+        """
+        )
+
+        # Investment transactions table
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS investment_transactions (
+                id TEXT PRIMARY KEY,
+                account_id TEXT NOT NULL,
+                security_id TEXT,
+                date TEXT NOT NULL,
+                transaction_type TEXT NOT NULL,
+                quantity TEXT NOT NULL DEFAULT '0',
+                price TEXT NOT NULL DEFAULT '0',
+                commission TEXT NOT NULL DEFAULT '0',
+                amount TEXT NOT NULL,
+                memo TEXT,
+                status TEXT,
+                created_date TEXT NOT NULL,
+                modified_date TEXT NOT NULL,
+                FOREIGN KEY (account_id) REFERENCES accounts(id),
+                FOREIGN KEY (security_id) REFERENCES securities(id)
+            )
+        """
+        )
+
         # Indexes for performance
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_trans_account ON transactions(account_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_trans_date ON transactions(date)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_splits_trans ON splits(transaction_id)")
         cursor.execute("CREATE INDEX IF NOT EXISTS idx_payees_name ON payees(name)")
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sec_prices_sec ON security_prices(security_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_inv_trans_account ON investment_transactions(account_id)"
+        )
 
         self.conn.commit()
         self._seed_default_categories()
@@ -142,9 +204,62 @@ class Storage:
         columns = [row[1] for row in cursor.fetchall()]
 
         if "savings_subtype" not in columns:
-            # Add savings_subtype column
             cursor.execute("ALTER TABLE accounts ADD COLUMN savings_subtype TEXT")
             self.conn.commit()
+
+        # Ensure investment tables exist (safe for existing databases)
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS securities (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                ticker_symbol TEXT,
+                security_type TEXT NOT NULL,
+                notes TEXT
+            )
+        """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS security_prices (
+                id TEXT PRIMARY KEY,
+                security_id TEXT NOT NULL,
+                date TEXT NOT NULL,
+                price TEXT NOT NULL,
+                source TEXT NOT NULL DEFAULT 'manual',
+                FOREIGN KEY (security_id) REFERENCES securities(id) ON DELETE CASCADE,
+                UNIQUE (security_id, date)
+            )
+        """
+        )
+        cursor.execute(
+            """
+            CREATE TABLE IF NOT EXISTS investment_transactions (
+                id TEXT PRIMARY KEY,
+                account_id TEXT NOT NULL,
+                security_id TEXT,
+                date TEXT NOT NULL,
+                transaction_type TEXT NOT NULL,
+                quantity TEXT NOT NULL DEFAULT '0',
+                price TEXT NOT NULL DEFAULT '0',
+                commission TEXT NOT NULL DEFAULT '0',
+                amount TEXT NOT NULL,
+                memo TEXT,
+                status TEXT,
+                created_date TEXT NOT NULL,
+                modified_date TEXT NOT NULL,
+                FOREIGN KEY (account_id) REFERENCES accounts(id),
+                FOREIGN KEY (security_id) REFERENCES securities(id)
+            )
+        """
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_sec_prices_sec ON security_prices(security_id)"
+        )
+        cursor.execute(
+            "CREATE INDEX IF NOT EXISTS idx_inv_trans_account ON investment_transactions(account_id)"
+        )
+        self.conn.commit()
 
     def _seed_default_categories(self) -> None:
         """Create default categories if none exist."""
@@ -500,7 +615,7 @@ class Storage:
         return [row["name"] for row in rows]
 
     def _update_account_balance(self, account_id: str) -> None:
-        """Recalculate account balance from transactions."""
+        """Recalculate account balance from transactions (and investment transactions)."""
         cursor = self.conn.cursor()
 
         # Get opening balance
@@ -512,17 +627,213 @@ class Storage:
 
         opening_balance = Decimal(account_row["opening_balance"])
 
-        # Sum all transactions
+        # Sum regular transactions
         result = cursor.execute(
             "SELECT SUM(CAST(amount AS REAL)) as total FROM transactions WHERE account_id = ?",
             (account_id,),
         ).fetchone()
-
         transaction_total = Decimal(str(result["total"] or 0))
-        new_balance = opening_balance + transaction_total
 
-        # Update account
+        # Also sum investment transaction cash impacts
+        inv_result = cursor.execute(
+            "SELECT SUM(CAST(amount AS REAL)) as total "
+            "FROM investment_transactions WHERE account_id = ?",
+            (account_id,),
+        ).fetchone()
+        inv_total = Decimal(str(inv_result["total"] or 0))
+
+        new_balance = opening_balance + transaction_total + inv_total
+
         cursor.execute(
             "UPDATE accounts SET current_balance = ? WHERE id = ?", (str(new_balance), account_id)
         )
         self.conn.commit()
+
+    # -----------------------------------------------------------------------
+    # Security operations
+    # -----------------------------------------------------------------------
+
+    def save_security(self, security: Security) -> None:
+        """Save or update a security."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO securities (id, name, ticker_symbol, security_type, notes)
+            VALUES (?, ?, ?, ?, ?)
+        """,
+            (
+                security.id,
+                security.name,
+                security.ticker_symbol,
+                security.security_type.value,
+                security.notes,
+            ),
+        )
+        self.conn.commit()
+
+    def get_security(self, security_id: str) -> Optional[Security]:
+        """Get a security by ID."""
+        cursor = self.conn.cursor()
+        row = cursor.execute("SELECT * FROM securities WHERE id = ?", (security_id,)).fetchone()
+        if not row:
+            return None
+        return self._row_to_security(row)
+
+    def get_all_securities(self) -> List[Security]:
+        """Get all securities ordered by name."""
+        cursor = self.conn.cursor()
+        rows = cursor.execute("SELECT * FROM securities ORDER BY name").fetchall()
+        return [self._row_to_security(row) for row in rows]
+
+    def delete_security(self, security_id: str) -> None:
+        """Delete a security (cascades to prices)."""
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM securities WHERE id = ?", (security_id,))
+        self.conn.commit()
+
+    def _row_to_security(self, row: Any) -> Security:
+        return Security(
+            id=row["id"],
+            name=row["name"],
+            ticker_symbol=row["ticker_symbol"] or "",
+            security_type=SecurityType(row["security_type"]),
+            notes=row["notes"] or "",
+        )
+
+    # -----------------------------------------------------------------------
+    # Security price operations
+    # -----------------------------------------------------------------------
+
+    def save_security_price(self, price_obj: SecurityPrice) -> None:
+        """Upsert a security price (per-day uniqueness enforced)."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            INSERT INTO security_prices (id, security_id, date, price, source)
+            VALUES (?, ?, ?, ?, ?)
+            ON CONFLICT(security_id, date) DO UPDATE SET
+                price = excluded.price,
+                source = excluded.source
+        """,
+            (
+                price_obj.id,
+                price_obj.security_id,
+                price_obj.date.isoformat(),
+                str(price_obj.price),
+                price_obj.source,
+            ),
+        )
+        self.conn.commit()
+
+    def get_latest_price(self, security_id: str) -> Optional[SecurityPrice]:
+        """Get the most recent price for a security."""
+        cursor = self.conn.cursor()
+        row = cursor.execute(
+            "SELECT * FROM security_prices WHERE security_id = ? ORDER BY date DESC LIMIT 1",
+            (security_id,),
+        ).fetchone()
+        if not row:
+            return None
+        return self._row_to_security_price(row)
+
+    def get_price_history(self, security_id: str) -> List[SecurityPrice]:
+        """Get full price history for a security, oldest first."""
+        cursor = self.conn.cursor()
+        rows = cursor.execute(
+            "SELECT * FROM security_prices WHERE security_id = ? ORDER BY date ASC",
+            (security_id,),
+        ).fetchall()
+        return [self._row_to_security_price(row) for row in rows]
+
+    def delete_security_prices(self, security_id: str) -> None:
+        """Delete all price records for a security."""
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM security_prices WHERE security_id = ?", (security_id,))
+        self.conn.commit()
+
+    def _row_to_security_price(self, row: Any) -> SecurityPrice:
+        return SecurityPrice(
+            id=row["id"],
+            security_id=row["security_id"],
+            date=date.fromisoformat(row["date"]),
+            price=Decimal(row["price"]),
+            source=row["source"],
+        )
+
+    # -----------------------------------------------------------------------
+    # Investment transaction operations
+    # -----------------------------------------------------------------------
+
+    def save_investment_transaction(self, txn: InvestmentTransaction) -> None:
+        """Save or update an investment transaction."""
+        cursor = self.conn.cursor()
+        cursor.execute(
+            """
+            INSERT OR REPLACE INTO investment_transactions
+            (id, account_id, security_id, date, transaction_type, quantity,
+             price, commission, amount, memo, status, created_date, modified_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+            (
+                txn.id,
+                txn.account_id,
+                txn.security_id,
+                txn.date.isoformat(),
+                txn.transaction_type.value,
+                str(txn.quantity),
+                str(txn.price),
+                str(txn.commission),
+                str(txn.amount),
+                txn.memo,
+                txn.status.value,
+                txn.created_date.isoformat(),
+                txn.modified_date.isoformat(),
+            ),
+        )
+        self.conn.commit()
+        self._update_account_balance(txn.account_id)
+
+    def get_investment_transaction(self, txn_id: str) -> Optional[InvestmentTransaction]:
+        """Get an investment transaction by ID."""
+        cursor = self.conn.cursor()
+        row = cursor.execute(
+            "SELECT * FROM investment_transactions WHERE id = ?", (txn_id,)
+        ).fetchone()
+        if not row:
+            return None
+        return self._row_to_investment_transaction(row)
+
+    def get_investment_transactions_for_account(
+        self, account_id: str
+    ) -> List[InvestmentTransaction]:
+        """Get all investment transactions for an account, newest first."""
+        cursor = self.conn.cursor()
+        rows = cursor.execute(
+            "SELECT * FROM investment_transactions WHERE account_id = ? ORDER BY date DESC, created_date DESC",
+            (account_id,),
+        ).fetchall()
+        return [self._row_to_investment_transaction(row) for row in rows]
+
+    def delete_investment_transaction(self, txn_id: str, account_id: str) -> None:
+        """Delete an investment transaction and update account balance."""
+        cursor = self.conn.cursor()
+        cursor.execute("DELETE FROM investment_transactions WHERE id = ?", (txn_id,))
+        self.conn.commit()
+        self._update_account_balance(account_id)
+
+    def _row_to_investment_transaction(self, row: Any) -> InvestmentTransaction:
+        return InvestmentTransaction(
+            id=row["id"],
+            account_id=row["account_id"],
+            security_id=row["security_id"],
+            date=date.fromisoformat(row["date"]),
+            transaction_type=InvestmentTransactionType(row["transaction_type"]),
+            quantity=Decimal(row["quantity"]),
+            price=Decimal(row["price"]),
+            commission=Decimal(row["commission"]),
+            amount=Decimal(row["amount"]),
+            memo=row["memo"] or "",
+            status=TransactionStatus(row["status"] or ""),
+            created_date=datetime.fromisoformat(row["created_date"]),
+            modified_date=datetime.fromisoformat(row["modified_date"]),
+        )

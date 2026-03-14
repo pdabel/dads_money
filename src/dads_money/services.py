@@ -1,16 +1,35 @@
 """Application services layer."""
 
-from datetime import datetime
+from datetime import date as Date, datetime
 from decimal import Decimal
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 
 from .config import Config
 from .io_csv import CSVParser, CSVWriter
 from .io_ofx import OFXImporter
 from .io_qif import QIFParser, QIFWriter
-from .models import Account, Category, Transaction
+from .models import (
+    Account,
+    Category,
+    Holding,
+    InvestmentTransaction,
+    InvestmentTransactionType,
+    PortfolioSummary,
+    Security,
+    SecurityPrice,
+    SecurityType,
+    Transaction,
+    TransactionStatus,
+)
 from .storage import Storage
+
+try:
+    import yfinance as yf
+
+    _YFINANCE_AVAILABLE = True
+except ImportError:
+    _YFINANCE_AVAILABLE = False
 
 
 class MoneyService:
@@ -218,3 +237,375 @@ class MoneyService:
     def get_predefined_payees(self) -> List[str]:
         """Get only predefined payees."""
         return self.storage.get_predefined_payees()
+
+    # -----------------------------------------------------------------------
+    # Security operations
+    # -----------------------------------------------------------------------
+
+    def create_security(
+        self,
+        name: str,
+        ticker_symbol: str = "",
+        security_type: SecurityType = SecurityType.STOCK,
+        notes: str = "",
+    ) -> Security:
+        """Create and persist a new security."""
+        security = Security(
+            name=name,
+            ticker_symbol=ticker_symbol,
+            security_type=security_type,
+            notes=notes,
+        )
+        self.storage.save_security(security)
+        return security
+
+    def get_security(self, security_id: str) -> Optional[Security]:
+        return self.storage.get_security(security_id)
+
+    def get_all_securities(self) -> List[Security]:
+        return self.storage.get_all_securities()
+
+    def update_security(self, security: Security) -> None:
+        self.storage.save_security(security)
+
+    def delete_security(self, security_id: str) -> None:
+        self.storage.delete_security(security_id)
+
+    # -----------------------------------------------------------------------
+    # Security price operations
+    # -----------------------------------------------------------------------
+
+    def add_security_price(
+        self,
+        security_id: str,
+        price_date: Date,
+        price: Decimal,
+        source: str = "manual",
+    ) -> SecurityPrice:
+        """Add (or update) a security price for a given date."""
+        price_obj = SecurityPrice(
+            security_id=security_id,
+            date=price_date,
+            price=price,
+            source=source,
+        )
+        self.storage.save_security_price(price_obj)
+        return price_obj
+
+    def get_latest_price(self, security_id: str) -> Optional[SecurityPrice]:
+        return self.storage.get_latest_price(security_id)
+
+    def get_price_history(self, security_id: str) -> List[SecurityPrice]:
+        return self.storage.get_price_history(security_id)
+
+    # -----------------------------------------------------------------------
+    # Investment transaction operations
+    # -----------------------------------------------------------------------
+
+    def create_investment_transaction(
+        self,
+        account_id: str,
+        transaction_type: InvestmentTransactionType,
+        txn_date: Date,
+        security_id: Optional[str] = None,
+        quantity: Decimal = Decimal("0"),
+        price: Decimal = Decimal("0"),
+        commission: Decimal = Decimal("0"),
+        memo: str = "",
+        status: TransactionStatus = TransactionStatus.UNCLEARED,
+    ) -> InvestmentTransaction:
+        """Create a new investment transaction, computing the cash amount."""
+        amount = _compute_cash_amount(transaction_type, quantity, price, commission)
+        txn = InvestmentTransaction(
+            account_id=account_id,
+            security_id=security_id,
+            date=txn_date,
+            transaction_type=transaction_type,
+            quantity=quantity,
+            price=price,
+            commission=commission,
+            amount=amount,
+            memo=memo,
+            status=status,
+        )
+        self.storage.save_investment_transaction(txn)
+        return txn
+
+    def get_investment_transaction(self, txn_id: str) -> Optional[InvestmentTransaction]:
+        return self.storage.get_investment_transaction(txn_id)
+
+    def get_investment_transactions_for_account(
+        self, account_id: str
+    ) -> List[InvestmentTransaction]:
+        return self.storage.get_investment_transactions_for_account(account_id)
+
+    def update_investment_transaction(self, txn: InvestmentTransaction) -> None:
+        """Recompute cash amount then persist."""
+        txn.amount = _compute_cash_amount(
+            txn.transaction_type, txn.quantity, txn.price, txn.commission
+        )
+        txn.modified_date = datetime.now()
+        self.storage.save_investment_transaction(txn)
+
+    def delete_investment_transaction(self, txn_id: str, account_id: str) -> None:
+        self.storage.delete_investment_transaction(txn_id, account_id)
+
+    # -----------------------------------------------------------------------
+    # Portfolio / holdings computation
+    # -----------------------------------------------------------------------
+
+    def get_holdings_for_account(self, account_id: str) -> List[Holding]:
+        """Return current holdings using average cost basis.
+
+        Only securities with a non-zero share balance are returned.
+        """
+        transactions = self.storage.get_investment_transactions_for_account(account_id)
+        # Must process in chronological order so BUY always precedes its SELL
+        transactions = sorted(transactions, key=lambda t: (t.date, t.created_date))
+
+        # Accumulate per-security: (total_shares, total_cost)
+        shares: Dict[str, Decimal] = {}
+        total_cost: Dict[str, Decimal] = {}
+
+        for txn in transactions:
+            if txn.security_id is None:
+                continue
+            sid = txn.security_id
+            qty = txn.quantity
+
+            if txn.transaction_type in (
+                InvestmentTransactionType.BUY,
+                InvestmentTransactionType.ADD,
+                InvestmentTransactionType.REINV_DIV,
+            ):
+                shares[sid] = shares.get(sid, Decimal("0")) + qty
+                cost = qty * txn.price + txn.commission
+                total_cost[sid] = total_cost.get(sid, Decimal("0")) + cost
+
+            elif txn.transaction_type == InvestmentTransactionType.SELL:
+                held = shares.get(sid, Decimal("0"))
+                avg = total_cost.get(sid, Decimal("0")) / held if held else Decimal("0")
+                sell_qty = min(qty, held)
+                shares[sid] = held - sell_qty
+                total_cost[sid] = total_cost.get(sid, Decimal("0")) - avg * sell_qty
+
+            elif txn.transaction_type == InvestmentTransactionType.REMOVE:
+                shares[sid] = shares.get(sid, Decimal("0")) - qty
+
+        holdings: List[Holding] = []
+        for sid, sh in shares.items():
+            if sh <= Decimal("0"):
+                continue
+            security = self.storage.get_security(sid)
+            if security is None:
+                continue
+            tc = total_cost.get(sid, Decimal("0"))
+            avg = tc / sh if sh else Decimal("0")
+
+            latest_price_obj = self.storage.get_latest_price(sid)
+            cp: Optional[Decimal]
+            mv: Optional[Decimal]
+            gl: Optional[Decimal]
+            gl_pct: Optional[Decimal]
+            if latest_price_obj is not None:
+                cp = latest_price_obj.price
+                mv = sh * cp
+                gl = mv - tc
+                gl_pct = (gl / tc * Decimal("100")) if tc else None
+            else:
+                cp = None
+                mv = None
+                gl = None
+                gl_pct = None
+
+            holdings.append(
+                Holding(
+                    security=security,
+                    shares=sh,
+                    avg_cost=avg,
+                    total_cost=tc,
+                    current_price=cp,
+                    market_value=mv,
+                    gain_loss=gl,
+                    gain_loss_pct=gl_pct,
+                )
+            )
+
+        holdings.sort(key=lambda h: h.security.name)
+        return holdings
+
+    def get_portfolio_summary(self, account_id: str) -> PortfolioSummary:
+        """Return a summary of an investment account's portfolio."""
+        account = self.storage.get_account(account_id)
+        cash = account.current_balance if account else Decimal("0")
+
+        holdings = self.get_holdings_for_account(account_id)
+
+        hv: Optional[Decimal]
+        total_val: Optional[Decimal]
+        ugl: Optional[Decimal]
+        if any(h.market_value is not None for h in holdings):
+            hv = sum(
+                (h.market_value for h in holdings if h.market_value is not None),
+                Decimal("0"),
+            )
+            tc = sum((h.total_cost for h in holdings), Decimal("0"))
+            total_val = cash + hv
+            ugl = hv - tc
+        else:
+            hv = None
+            total_val = None
+            ugl = None
+            tc = sum((h.total_cost for h in holdings), Decimal("0"))
+
+        xirr_val = self.calculate_xirr(account_id)
+
+        return PortfolioSummary(
+            cash_balance=cash,
+            total_cost=tc,
+            holdings_value=hv,
+            total_value=total_val,
+            unrealized_gain_loss=ugl,
+            roi_xirr=xirr_val,
+        )
+
+    # -----------------------------------------------------------------------
+    # Live price fetching
+    # -----------------------------------------------------------------------
+
+    def fetch_price_from_api(self, ticker: str) -> Optional[Decimal]:
+        """Fetch the latest price for a ticker via yfinance.
+
+        Returns None if yfinance is not installed or the fetch fails.
+        Raises ImportError if the caller should notify the user.
+        """
+        if not _YFINANCE_AVAILABLE:
+            raise ImportError("yfinance is not installed. Run: pip install yfinance")
+        try:
+            info = yf.Ticker(ticker).fast_info
+            raw = getattr(info, "last_price", None)
+            if raw is None:
+                return None
+            return Decimal(str(raw))
+        except Exception:
+            return None
+
+    # -----------------------------------------------------------------------
+    # XIRR / ROI
+    # -----------------------------------------------------------------------
+
+    def calculate_xirr(self, account_id: str) -> Optional[Decimal]:
+        """Calculate annualised internal rate of return (XIRR) for an account.
+
+        Cash flows are the investment transaction amounts (outflows negative,
+        inflows positive). The terminal value is the current portfolio market
+        value + cash balance (as a positive inflow on today's date).
+
+        Returns None if there is insufficient data or no convergence.
+        """
+        transactions = self.storage.get_investment_transactions_for_account(account_id)
+        if not transactions:
+            return None
+
+        cash_flows: List[Tuple[Date, Decimal]] = []
+        for txn in transactions:
+            if txn.amount != Decimal("0"):
+                # Investment account perspective: outflows already negative
+                cash_flows.append((txn.date, txn.amount))
+
+        holdings = self.get_holdings_for_account(account_id)
+        account = self.storage.get_account(account_id)
+        cash_balance = account.current_balance if account else Decimal("0")
+
+        if any(h.market_value is not None for h in holdings):
+            holdings_total: Decimal = sum(
+                (h.market_value for h in holdings if h.market_value is not None),
+                Decimal("0"),
+            )
+            terminal = holdings_total + cash_balance
+        else:
+            # No prices — cannot compute meaningful XIRR
+            return None
+
+        today = Date.today()
+        cash_flows.append((today, terminal))
+
+        if len(cash_flows) < 2:
+            return None
+
+        result = _xirr(cash_flows)
+        if result is None:
+            return None
+        return Decimal(str(round(result, 6)))
+
+
+# ---------------------------------------------------------------------------
+# Module-level helpers
+# ---------------------------------------------------------------------------
+
+# Types that involve share quantity changes (used for validation elsewhere)
+_QUANTITY_TYPES = frozenset(
+    [
+        InvestmentTransactionType.BUY,
+        InvestmentTransactionType.SELL,
+        InvestmentTransactionType.ADD,
+        InvestmentTransactionType.REMOVE,
+        InvestmentTransactionType.REINV_DIV,
+    ]
+)
+
+
+def _compute_cash_amount(
+    txn_type: InvestmentTransactionType,
+    quantity: Decimal,
+    price: Decimal,
+    commission: Decimal,
+) -> Decimal:
+    """Compute the cash impact of an investment transaction."""
+    if txn_type == InvestmentTransactionType.BUY:
+        return -(quantity * price + commission)
+    elif txn_type == InvestmentTransactionType.SELL:
+        return quantity * price - commission
+    elif txn_type == InvestmentTransactionType.MISC_EXP:
+        return -abs(commission if quantity == Decimal("0") else quantity * price + commission)
+    elif txn_type in (
+        InvestmentTransactionType.DIV,
+        InvestmentTransactionType.INT_INC,
+        InvestmentTransactionType.MISC_INC,
+        InvestmentTransactionType.RETURN_CAPITAL,
+    ):
+        # For income types, `price` is used as the cash amount when qty == 0
+        if quantity == Decimal("0"):
+            return price
+        return quantity * price
+    else:
+        # ADD, REMOVE, REINV_DIV — no direct cash impact
+        return Decimal("0")
+
+
+def _xirr(cash_flows: List[Tuple[Date, Decimal]]) -> Optional[float]:
+    """Newton-Raphson XIRR.  Returns the rate or None if not convergent."""
+    if len(cash_flows) < 2:
+        return None
+
+    base_date = cash_flows[0][0]
+    amounts = [float(cf[1]) for cf in cash_flows]
+    years = [(cf[0] - base_date).days / 365.0 for cf in cash_flows]
+
+    if all(a >= 0 for a in amounts) or all(a <= 0 for a in amounts):
+        return None  # No sign change — no valid IRR
+
+    rate = 0.1  # initial guess
+    for _ in range(200):
+        npv = sum(a / (1 + rate) ** t for a, t in zip(amounts, years))
+        d_npv = sum(-t * a / (1 + rate) ** (t + 1) for a, t in zip(amounts, years))
+        if d_npv == 0:
+            return None
+        new_rate = rate - npv / d_npv
+        if abs(new_rate - rate) < 1e-7:
+            return float(new_rate)
+        rate = new_rate
+        if rate <= -1:
+            rate = -0.9  # guard against degenerate move
+
+    return None  # did not converge
