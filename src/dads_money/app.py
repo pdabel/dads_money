@@ -5,7 +5,7 @@ from pathlib import Path
 from typing import Optional
 from PySide6.QtWidgets import QApplication
 
-from .ui import MainWindow
+from .ui_views import MainWindow
 
 
 def main(db_path: Optional[Path] = None) -> None:
