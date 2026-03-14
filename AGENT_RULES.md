@@ -77,6 +77,8 @@ def get_account(self, account_id: int) -> Account | None:
 
 **Update IMPLEMENTATION.md (MUST)**: If adding new files, modifying module structure, or significantly changing line counts, update the file listing and line count summary in [IMPLEMENTATION.md](IMPLEMENTATION.md). This document should reflect the current state of the codebase.
 
+**Updating existing docs is ALWAYS required (MUST)**: The rule "do not create a new markdown file to document changes" applies only to creating *new* summary/changelog documents. It does NOT exempt agents from updating *existing* documentation files (README.md, IMPLEMENTATION.md, CURRENCY_GUIDE.md, etc.) as required by the rules above. When in doubt: update existing docs, do not create new ones.
+
 **Maintain Documentation Style (SHOULD)**: Follow existing markdown conventions in [README.md](README.md), [QUICKSTART.md](QUICKSTART.md), and [CURRENCY_GUIDE.md](CURRENCY_GUIDE.md): use section headers, code blocks with language specified, bullet points, tables, and command examples with bash syntax highlighting.
 
 **Mark Status (CONSIDER)**: Use status labels like "COMPLETE AND READY TO USE" or version notes in documentation to help users understand feature completeness.

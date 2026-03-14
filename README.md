@@ -138,15 +138,23 @@ See [INSTALL.md](INSTALL.md) for detailed installation instructions.
 ```
 src/dads_money/
 ├── __init__.py          # Package initialization
-├── app.py              # Application entry point
-├── config.py           # Configuration and paths
-├── models.py           # Data models (Account, Transaction, Category, Split)
-├── storage.py          # SQLite database layer
-├── services.py         # Business logic layer
-├── ui.py               # PySide6 GUI (Money 3.0 style)
-├── io_qif.py           # QIF import/export
-├── io_csv.py           # CSV import/export
-└── io_ofx.py           # OFX import
+├── app.py               # Application entry point
+├── config.py            # Configuration and paths
+├── models.py            # Data models (Account, Transaction, Category, Security, etc.)
+├── storage.py           # SQLite database layer
+├── services.py          # Business logic layer
+├── settings.py          # User preferences (currency, date format)
+├── io_qif.py            # QIF import/export
+├── io_csv.py            # CSV import/export
+├── io_ofx.py            # OFX import
+└── ui_views/            # PySide6 GUI package (Money 3.0 style)
+    ├── __init__.py          # Re-exports MainWindow
+    ├── main_window.py       # Main application window
+    ├── account_dialogs.py   # AccountDialog, TransactionDialog
+    ├── manage_dialogs.py    # CategoryDialog, PayeeDialog
+    ├── settings_dialog.py   # SettingsDialog
+    ├── investment_panel.py  # InvestmentPanel
+    └── investment_dialogs.py  # Investment dialogs & worker thread
 ```
 
 ## Usage Tips

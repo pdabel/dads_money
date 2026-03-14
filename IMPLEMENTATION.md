@@ -57,15 +57,23 @@ A fully functional, Microsoft Money 3.0 compatible personal finance application 
 **Code Structure**:
 ```
 src/dads_money/
-├── app.py          # Application entry point
-├── ui.py           # PySide6 GUI (Money 3.0 style)
-├── models.py       # Data models (Account, Transaction, Category, Split)
-├── storage.py      # SQLite persistence layer
-├── services.py     # Business logic orchestration
-├── io_qif.py       # QIF import/export
-├── io_csv.py       # CSV import/export
-├── io_ofx.py       # OFX import
-└── config.py       # Configuration and paths
+├── app.py              # Application entry point
+├── models.py           # Data models (Account, Transaction, Category, etc.)
+├── storage.py          # SQLite persistence layer
+├── services.py         # Business logic orchestration
+├── io_qif.py           # QIF import/export
+├── io_csv.py           # CSV import/export
+├── io_ofx.py           # OFX import
+├── config.py           # Configuration and paths
+├── settings.py         # User preferences
+└── ui_views/           # PySide6 GUI package (Money 3.0 style)
+    ├── __init__.py         # Re-exports MainWindow
+    ├── main_window.py      # Main application window
+    ├── account_dialogs.py  # AccountDialog, TransactionDialog
+    ├── manage_dialogs.py   # CategoryDialog, PayeeDialog
+    ├── settings_dialog.py  # SettingsDialog
+    ├── investment_panel.py # InvestmentPanel
+    └── investment_dialogs.py # Investment-related dialogs & worker thread
 ```
 
 ---
@@ -93,17 +101,24 @@ python demo.py
 
 ## Files Created
 
-### Application Code (10 files)
-- `src/dads_money/__init__.py` - Package init (3 lines)
-- `src/dads_money/app.py` - Main entry point (28 lines)
-- `src/dads_money/ui.py` - GUI (1,278 lines, Money 3.0 style)
-- `src/dads_money/models.py` - Data models (129 lines)
-- `src/dads_money/storage.py` - Database layer (478 lines)
-- `src/dads_money/services.py` - Business logic (199 lines)
-- `src/dads_money/io_qif.py` - QIF parser/writer (161 lines)
-- `src/dads_money/io_csv.py` - CSV parser/writer (132 lines)
-- `src/dads_money/io_ofx.py` - OFX parser (50 lines)
-- `src/dads_money/config.py` - Configuration (38 lines)
+### Application Code (17 files)
+- `src/dads_money/__init__.py` - Package init
+- `src/dads_money/app.py` - Main entry point
+- `src/dads_money/models.py` - Data models (Account, Transaction, Category, Security, etc.)
+- `src/dads_money/storage.py` - SQLite database layer
+- `src/dads_money/services.py` - Business logic orchestration
+- `src/dads_money/io_qif.py` - QIF parser/writer
+- `src/dads_money/io_csv.py` - CSV parser/writer
+- `src/dads_money/io_ofx.py` - OFX parser
+- `src/dads_money/config.py` - Configuration and paths
+- `src/dads_money/settings.py` - User preferences (currency, date format)
+- `src/dads_money/ui_views/__init__.py` - Re-exports MainWindow
+- `src/dads_money/ui_views/main_window.py` - Main application window
+- `src/dads_money/ui_views/account_dialogs.py` - AccountDialog, TransactionDialog
+- `src/dads_money/ui_views/manage_dialogs.py` - CategoryDialog, PayeeDialog
+- `src/dads_money/ui_views/settings_dialog.py` - SettingsDialog
+- `src/dads_money/ui_views/investment_panel.py` - InvestmentPanel
+- `src/dads_money/ui_views/investment_dialogs.py` - Investment dialogs & PriceFetchWorker thread
 
 ### Project Files
 - `pyproject.toml` - Package configuration with dependencies
