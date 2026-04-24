@@ -150,6 +150,15 @@ class InvestmentTransactionDialog(QDialog):
         self.status_combo.addItem("Reconciled", TransactionStatus.RECONCILED)
         layout.addRow("Status:", self.status_combo)
 
+        # Transfer proceeds to account (Sell only)
+        self.transfer_label = QLabel("Transfer proceeds to:")
+        self.transfer_combo = QComboBox()
+        self.transfer_combo.addItem("— Keep as cash —", None)
+        for acct in self.service.get_all_accounts():
+            if acct.id != self.account.id:
+                self.transfer_combo.addItem(f"{acct.name} ({acct.account_type.value})", acct.id)
+        layout.addRow(self.transfer_label, self.transfer_combo)
+
         # Buttons
         buttons = QDialogButtonBox(
             QDialogButtonBox.Ok | QDialogButtonBox.Cancel  # type: ignore[attr-defined]
@@ -165,6 +174,7 @@ class InvestmentTransactionDialog(QDialog):
         needs_qty = txn_type in _NEEDS_QTY
         needs_commission = txn_type in _NEEDS_COMMISSION
         is_income = txn_type not in _NEEDS_QTY
+        is_sell = txn_type == InvestmentTransactionType.SELL
 
         for w in (self.qty_label, self.qty_spin, self.price_label, self.price_spin):
             w.setVisible(needs_qty)
@@ -172,6 +182,8 @@ class InvestmentTransactionDialog(QDialog):
             w.setVisible(needs_commission)
         for w in (self.amount_label, self.amount_spin):
             w.setVisible(is_income)
+        for w in (self.transfer_label, self.transfer_combo):
+            w.setVisible(is_sell)
 
     def _populate(self, txn: InvestmentTransaction) -> None:
         d = txn.date
@@ -210,6 +222,12 @@ class InvestmentTransactionDialog(QDialog):
             price = Decimal(str(self.amount_spin.value()))
             commission = Decimal("0")
 
+        transfer_account_id = (
+            self.transfer_combo.currentData()
+            if txn_type == InvestmentTransactionType.SELL
+            else None
+        )
+
         return {
             "account_id": self.account.id,
             "transaction_type": txn_type,
@@ -220,6 +238,7 @@ class InvestmentTransactionDialog(QDialog):
             "commission": commission,
             "memo": self.memo_edit.text(),
             "status": self.status_combo.currentData(),
+            "transfer_account_id": transfer_account_id,
         }
 
 
@@ -243,13 +262,22 @@ class SecurityDialog(QDialog):
         layout.addRow("Name:", self.name_edit)
 
         self.ticker_edit = QLineEdit()
-        self.ticker_edit.setPlaceholderText("e.g. AAPL (optional)")
+        self.ticker_edit.setPlaceholderText("Yahoo Finance format, e.g. AAPL, LLOY.L (optional)")
         layout.addRow("Ticker Symbol:", self.ticker_edit)
 
         self.type_combo = QComboBox()
         for st in SecurityType:
             self.type_combo.addItem(st.value, st)
         layout.addRow("Type:", self.type_combo)
+
+        # Currency of the security's native price (empty = same as app currency)
+        from ..settings import CURRENCIES
+
+        self.currency_combo = QComboBox()
+        self.currency_combo.addItem("(Same as app currency)", "")
+        for code, info in sorted(CURRENCIES.items()):
+            self.currency_combo.addItem(f"{code} — {info['name']} ({info['symbol']})", code)
+        layout.addRow("Native Currency:", self.currency_combo)
 
         self.notes_edit = QLineEdit()
         layout.addRow("Notes:", self.notes_edit)
@@ -267,6 +295,9 @@ class SecurityDialog(QDialog):
         idx = self.type_combo.findData(sec.security_type)
         if idx >= 0:
             self.type_combo.setCurrentIndex(idx)
+        cur_idx = self.currency_combo.findData(sec.currency)
+        if cur_idx >= 0:
+            self.currency_combo.setCurrentIndex(cur_idx)
         self.notes_edit.setText(sec.notes)
 
     def _on_accept(self) -> None:
@@ -281,6 +312,7 @@ class SecurityDialog(QDialog):
             "ticker_symbol": self.ticker_edit.text().strip().upper(),
             "security_type": self.type_combo.currentData(),
             "notes": self.notes_edit.text().strip(),
+            "currency": self.currency_combo.currentData() or "",
         }
 
 
@@ -347,6 +379,7 @@ class ManageSecuritiesDialog(QDialog):
             sec.ticker_symbol = d["ticker_symbol"]
             sec.security_type = d["security_type"]
             sec.notes = d["notes"]
+            sec.currency = d["currency"]
             self.service.update_security(sec)
             self._load()
 
@@ -388,7 +421,7 @@ class UpdatePriceDialog(QDialog):
         layout.addRow("Date:", self.date_edit)
 
         self.price_spin = QDoubleSpinBox()
-        self.price_spin.setDecimals(settings.decimal_places)
+        self.price_spin.setDecimals(6)
         self.price_spin.setRange(0, 1_000_000_000)
         self.price_spin.setPrefix(settings.currency_symbol + " ")
         layout.addRow("Price:", self.price_spin)
@@ -404,6 +437,73 @@ class UpdatePriceDialog(QDialog):
         qd = self.date_edit.date()
         price_date = date(qd.year(), qd.month(), qd.day())
         return price_date, Decimal(str(self.price_spin.value()))
+
+
+class CashReconcileDialog(QDialog):
+    """Reconcile an investment account's cash balance against a statement.
+
+    Creates a single adjustment transaction for the difference so the
+    calculated cash balance matches the user's statement value.
+    """
+
+    def __init__(self, parent: Any, current_balance: Decimal, settings: Any) -> None:
+        super().__init__(parent)
+        self._current = current_balance
+        self._settings = settings
+        self.setWindowTitle("Reconcile Cash Balance")
+        self.setModal(True)
+        self.setMinimumWidth(360)
+        self._init_ui()
+
+    def _init_ui(self) -> None:
+        layout = QFormLayout(self)
+
+        layout.addRow(
+            QLabel(f"Current cash balance: <b>{self._settings.format_currency(self._current)}</b>")
+        )
+
+        self.date_edit = QDateEdit(QDate.currentDate())
+        self.date_edit.setCalendarPopup(True)
+        layout.addRow("Statement date:", self.date_edit)
+
+        self.statement_spin = QDoubleSpinBox()
+        self.statement_spin.setDecimals(self._settings.decimal_places)
+        self.statement_spin.setRange(-1_000_000_000, 1_000_000_000)
+        self.statement_spin.setPrefix(self._settings.currency_symbol + " ")
+        self.statement_spin.setValue(float(self._current))
+        layout.addRow("Statement balance:", self.statement_spin)
+
+        self.adjustment_label = QLabel(self._fmt_adjustment())
+        layout.addRow("Adjustment:", self.adjustment_label)
+
+        self.memo_edit = QLineEdit()
+        self.memo_edit.setText("Cash reconciliation adjustment")
+        layout.addRow("Memo:", self.memo_edit)
+
+        self.statement_spin.valueChanged.connect(self._update_adjustment_label)
+
+        buttons = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel  # type: ignore[attr-defined]
+        )
+        buttons.accepted.connect(self.accept)
+        buttons.rejected.connect(self.reject)
+        layout.addRow(buttons)
+
+    def _adjustment(self) -> Decimal:
+        return Decimal(str(self.statement_spin.value())) - self._current
+
+    def _fmt_adjustment(self) -> str:
+        adj = self._adjustment()
+        return self._settings.format_currency(adj)
+
+    def _update_adjustment_label(self) -> None:
+        self.adjustment_label.setText(self._fmt_adjustment())
+
+    def get_data(self) -> tuple[date, Decimal, str]:
+        """Return (statement_date, adjustment_amount, memo)."""
+        qd = self.date_edit.date()
+        stmt_date = date(qd.year(), qd.month(), qd.day())
+        return stmt_date, self._adjustment(), self.memo_edit.text().strip()
 
 
 class PriceHistoryDialog(QDialog):
@@ -469,27 +569,34 @@ class PriceHistoryDialog(QDialog):
 
 
 class PriceFetchWorker(QThread):
-    """Fetches prices from yfinance in a background thread."""
+    """Fetches prices from yfinance in a background thread.
 
-    finished = Signal(int)  # number of securities updated
+    Prices are emitted via ``price_fetched`` so the main thread can save them
+    to SQLite (SQLite connections must not be shared across threads).
+    """
+
+    # emitted for each successfully fetched price: (security_id, price)
+    price_fetched = Signal(str, object)
+    finished = Signal(int, list)  # (number updated, list of failed ticker strings)
     error = Signal(str)  # error message if yfinance unavailable
 
-    def __init__(self, tickers: List[tuple[str, str]], service: MoneyService) -> None:
+    def __init__(self, tickers: List[tuple[str, str, str]], service: MoneyService) -> None:
         super().__init__()
-        self.tickers = tickers  # list of (security_id, ticker_symbol)
+        self.tickers = tickers  # list of (security_id, ticker_symbol, security_currency)
         self.service = service
 
     def run(self) -> None:
         updated = 0
-        for security_id, ticker in self.tickers:
+        failed: List[str] = []
+        for security_id, ticker, security_currency in self.tickers:
             try:
-                price = self.service.fetch_price_from_api(ticker)
+                price = self.service.fetch_price_from_api(ticker, security_currency)
             except ImportError as exc:
                 self.error.emit(str(exc))
                 return
             if price is not None:
-                from datetime import date as _date
-
-                self.service.add_security_price(security_id, _date.today(), price, source="api")
+                self.price_fetched.emit(security_id, price)
                 updated += 1
-        self.finished.emit(updated)
+            else:
+                failed.append(ticker)
+        self.finished.emit(updated, failed)

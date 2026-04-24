@@ -6,11 +6,12 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .config import Config
-from .io_csv import CSVParser, CSVWriter
+from .io_csv import CSVParser, CSVWriter, InvestmentCSVParser
 from .io_ofx import OFXImporter
-from .io_qif import QIFParser, QIFWriter
+from .io_qif import InvestmentQIFParser, QIFParser, QIFWriter
 from .models import (
     Account,
+    AccountType,
     Category,
     Holding,
     InvestmentTransaction,
@@ -22,6 +23,7 @@ from .models import (
     Transaction,
     TransactionStatus,
 )
+from .settings import get_settings
 from .storage import Storage
 
 try:
@@ -78,6 +80,7 @@ class MoneyService:
     def update_account(self, account: Account) -> None:
         """Update an existing account."""
         self.storage.save_account(account)
+        self.storage._update_account_balance(account.id)
 
     def delete_account(self, account_id: str) -> None:
         """Delete an account."""
@@ -165,7 +168,20 @@ class MoneyService:
 
     # Import/Export operations
     def import_qif(self, file_path: str, account_id: str) -> int:
-        """Import transactions from QIF file."""
+        """Import transactions from QIF file.
+
+        Routes to investment-aware parsing when the target account is an
+        investment account *or* when the file contains ``!Type:Invst`` data.
+        """
+        account = self.storage.get_account(account_id)
+        is_investment = (
+            account is not None and account.account_type == AccountType.INVESTMENT
+        ) or InvestmentQIFParser.is_investment_qif(file_path)
+
+        if is_investment:
+            records = InvestmentQIFParser.parse_file(file_path)
+            return self._save_investment_import_records(records, account_id)
+
         transactions = QIFParser.parse_file(file_path)
         count = 0
         for trans in transactions:
@@ -194,7 +210,20 @@ class MoneyService:
         QIFWriter.write_file(file_path, transactions, qif_type)
 
     def import_csv(self, file_path: str, account_id: str) -> int:
-        """Import transactions from CSV file."""
+        """Import transactions from CSV file.
+
+        Routes to investment-aware parsing when the target account is an
+        investment account *or* when the file has investment-style headers.
+        """
+        account = self.storage.get_account(account_id)
+        is_investment = (
+            account is not None and account.account_type == AccountType.INVESTMENT
+        ) or InvestmentCSVParser.is_investment_csv(file_path)
+
+        if is_investment:
+            records = InvestmentCSVParser.parse_file(file_path)
+            return self._save_investment_import_records(records, account_id)
+
         transactions = CSVParser.parse_file(file_path)
         count = 0
         for trans in transactions:
@@ -218,6 +247,72 @@ class MoneyService:
         for trans in transactions:
             trans.account_id = account_id
             self.storage.save_transaction(trans)
+            count += 1
+        return count
+
+    def _save_investment_import_records(
+        self,
+        records: list,
+        account_id: str,
+    ) -> int:
+        """Persist a list of ``InvestmentImportRecord`` objects.
+
+        Securities are matched by name (case-insensitive) against existing
+        records; new ones are auto-created with the name and no ticker so the
+        user can enrich them later via Manage Securities.
+        """
+        from .io_qif import InvestmentImportRecord  # local import avoids circular ref at module top
+
+        # Build a case-insensitive name → Security map once
+        sec_by_name: dict = {s.name.lower(): s for s in self.storage.get_all_securities()}
+
+        count = 0
+        for rec in records:
+            # Resolve or create security
+            security_id: Optional[str] = None
+            if rec.security_name:
+                key = rec.security_name.lower()
+                if key not in sec_by_name:
+                    new_sec = Security(
+                        name=rec.security_name,
+                        ticker_symbol="",
+                        security_type=SecurityType.STOCK,
+                    )
+                    self.storage.save_security(new_sec)
+                    sec_by_name[key] = new_sec
+                security_id = sec_by_name[key].id
+
+            # X-variant actions (BuyX, SellX, DivX …) mean the cash was
+            # transferred to/from another account, so this account has zero
+            # cash impact.  For regular actions, recompute from qty/price when
+            # available, falling back to the raw T-field amount.
+            if rec.is_transfer:
+                amount = Decimal("0")
+            elif rec.quantity != Decimal("0") and rec.price != Decimal("0"):
+                amount = _compute_cash_amount(
+                    rec.transaction_type, rec.quantity, rec.price, rec.commission
+                )
+            else:
+                amount = rec.amount
+
+            # Persist the per-date price from the I field so the holdings
+            # panel can compute market value without a manual price entry.
+            if security_id and rec.price != Decimal("0"):
+                self.add_security_price(security_id, rec.date, rec.price, source="import")
+
+            txn = InvestmentTransaction(
+                account_id=account_id,
+                security_id=security_id,
+                date=rec.date,
+                transaction_type=rec.transaction_type,
+                quantity=rec.quantity,
+                price=rec.price,
+                commission=rec.commission,
+                amount=amount,
+                memo=rec.memo,
+                status=rec.status,
+            )
+            self.storage.save_investment_transaction(txn)
             count += 1
         return count
 
@@ -248,6 +343,7 @@ class MoneyService:
         ticker_symbol: str = "",
         security_type: SecurityType = SecurityType.STOCK,
         notes: str = "",
+        currency: str = "",
     ) -> Security:
         """Create and persist a new security."""
         security = Security(
@@ -255,6 +351,7 @@ class MoneyService:
             ticker_symbol=ticker_symbol,
             security_type=security_type,
             notes=notes,
+            currency=currency,
         )
         self.storage.save_security(security)
         return security
@@ -339,11 +436,23 @@ class MoneyService:
     ) -> List[InvestmentTransaction]:
         return self.storage.get_investment_transactions_for_account(account_id)
 
-    def update_investment_transaction(self, txn: InvestmentTransaction) -> None:
-        """Recompute cash amount then persist."""
-        txn.amount = _compute_cash_amount(
-            txn.transaction_type, txn.quantity, txn.price, txn.commission
-        )
+    def update_investment_transaction(
+        self,
+        txn: InvestmentTransaction,
+        *,
+        force_amount: Optional[Decimal] = None,
+    ) -> None:
+        """Recompute cash amount then persist.
+
+        Pass *force_amount* to override the computed amount (e.g. when proceeds
+        are transferred to another account and should not appear as cash here).
+        """
+        if force_amount is not None:
+            txn.amount = force_amount
+        else:
+            txn.amount = _compute_cash_amount(
+                txn.transaction_type, txn.quantity, txn.price, txn.commission
+            )
         txn.modified_date = datetime.now()
         self.storage.save_investment_transaction(txn)
 
@@ -473,20 +582,78 @@ class MoneyService:
     # Live price fetching
     # -----------------------------------------------------------------------
 
-    def fetch_price_from_api(self, ticker: str) -> Optional[Decimal]:
-        """Fetch the latest price for a ticker via yfinance.
+    def _fetch_fx_rate(self, from_currency: str, to_currency: str) -> Optional[Decimal]:
+        """Fetch an FX spot rate from Yahoo Finance (e.g. USD → GBP via USDGBP=X).
 
-        Returns None if yfinance is not installed or the fetch fails.
-        Raises ImportError if the caller should notify the user.
+        Returns None if the rate cannot be fetched.
         """
-        if not _YFINANCE_AVAILABLE:
-            raise ImportError("yfinance is not installed. Run: pip install yfinance")
+        if from_currency.upper() == to_currency.upper():
+            return Decimal("1")
+        ticker = f"{from_currency.upper()}{to_currency.upper()}=X"
         try:
-            info = yf.Ticker(ticker).fast_info
+            t = yf.Ticker(ticker)
+            info = t.fast_info
             raw = getattr(info, "last_price", None)
             if raw is None:
                 return None
             return Decimal(str(raw))
+        except Exception:
+            return None
+
+    def fetch_price_from_api(
+        self,
+        ticker: str,
+        security_currency: str = "",
+    ) -> Optional[Decimal]:
+        """Fetch the latest price for a ticker via yfinance, converted to the
+        app's base currency.
+
+        Args:
+            ticker: Yahoo Finance ticker symbol.
+            security_currency: ISO code of the security's native currency
+                (from ``Security.currency``). Empty means «same as app currency».
+
+        Conversion rules applied in order:
+        1. GBp / GBX (pence) → divide by 100 to get GBP pounds.
+        2. If the reported currency differs from the app's base currency, fetch
+           the FX rate ``{reported}{base}=X`` and multiply.
+
+        Returns None on any failure.
+        Raises ImportError if yfinance is not installed.
+        """
+        if not _YFINANCE_AVAILABLE:
+            raise ImportError("yfinance is not installed. Run: pip install yfinance")
+        try:
+            t = yf.Ticker(ticker)
+            info = t.fast_info
+            raw = getattr(info, "last_price", None)
+            if raw is None:
+                return None
+            price = Decimal(str(raw))
+
+            # --- Step 1: pence → pounds ---
+            reported_currency = getattr(info, "currency", None) or ""
+            if reported_currency.upper() in ("GBX", "GBP") and reported_currency != "GBP":
+                # GBp (mixed case) = pence
+                price = price / Decimal("100")
+                reported_currency = "GBP"
+
+            # --- Step 2: foreign currency → app base currency ---
+            base_currency = get_settings().currency_code.upper()
+            # Determine the effective currency of the price
+            effective_currency = (
+                reported_currency.upper()
+                if reported_currency
+                else (security_currency.upper() if security_currency else base_currency)
+            )
+            if effective_currency and effective_currency != base_currency:
+                fx_rate = self._fetch_fx_rate(effective_currency, base_currency)
+                if fx_rate is None:
+                    # Can't convert — return None so the caller treats it as a failure
+                    return None
+                price = price * fx_rate
+
+            return price
         except Exception:
             return None
 
@@ -567,7 +734,10 @@ def _compute_cash_amount(
     elif txn_type == InvestmentTransactionType.SELL:
         return quantity * price - commission
     elif txn_type == InvestmentTransactionType.MISC_EXP:
-        return -abs(commission if quantity == Decimal("0") else quantity * price + commission)
+        # Use price as the cash amount when qty == 0 (symmetric with MISC_INC)
+        if quantity == Decimal("0"):
+            return -abs(price)
+        return -(quantity * price + commission)
     elif txn_type in (
         InvestmentTransactionType.DIV,
         InvestmentTransactionType.INT_INC,

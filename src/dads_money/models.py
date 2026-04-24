@@ -180,6 +180,9 @@ class Security:
     ticker_symbol: str = ""
     security_type: SecurityType = SecurityType.STOCK
     notes: str = ""
+    currency: str = (
+        ""  # ISO code of the security's native currency, e.g. "USD". Empty = same as app currency.
+    )
 
 
 @dataclass

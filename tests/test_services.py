@@ -80,11 +80,12 @@ class TestAccountServices:
             account = service.create_account("Original Name", AccountType.CHECKING, 1000.0)
 
             account.name = "Updated Name"
-            account.current_balance = Decimal("1500.0")
+            account.opening_balance = Decimal("1500.0")
             service.update_account(account)
 
             retrieved = service.get_account(account.id)
             assert retrieved.name == "Updated Name"
+            # current_balance is recalculated from opening_balance + transactions (none here)
             assert retrieved.current_balance == Decimal("1500.0")
         finally:
             service.close()

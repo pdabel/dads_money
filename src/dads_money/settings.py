@@ -80,7 +80,7 @@ class Settings:
     @property
     def currency_code(self) -> str:
         """Get the currency code."""
-        code = self._settings.get("currency_code", "USD")
+        code = self._settings.get("currency_code", "GBP")
         return str(code)
 
     @currency_code.setter

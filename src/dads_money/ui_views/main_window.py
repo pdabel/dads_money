@@ -7,9 +7,11 @@ from PySide6.QtCore import Qt
 from PySide6.QtGui import QAction, QColor, QFont
 from PySide6.QtWidgets import (
     QCheckBox,
+    QComboBox,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QFrame,
     QHeaderView,
     QHBoxLayout,
     QLabel,
@@ -200,6 +202,14 @@ class MainWindow(QMainWindow):
         title.setFont(title_font)
         layout.addWidget(title)
 
+        # Account type filter
+        self.account_type_filter = QComboBox()
+        self.account_type_filter.addItem("All Accounts", None)
+        for at in AccountType:
+            self.account_type_filter.addItem(at.value, at)
+        self.account_type_filter.currentIndexChanged.connect(lambda _: self.load_accounts())
+        layout.addWidget(self.account_type_filter)
+
         # Account list
         self.account_list = QListWidget()
         self.account_list.currentRowChanged.connect(self.account_selected)
@@ -214,6 +224,18 @@ class MainWindow(QMainWindow):
         btn_layout.addWidget(new_btn)
         btn_layout.addWidget(edit_btn)
         layout.addLayout(btn_layout)
+
+        # Net worth footer
+        sep = QFrame()
+        sep.setFrameShape(QFrame.HLine)  # type: ignore[attr-defined]
+        sep.setFrameShadow(QFrame.Sunken)  # type: ignore[attr-defined]
+        layout.addWidget(sep)
+        self.net_worth_label = QLabel("Net Worth: —")
+        nw_font = QFont()
+        nw_font.setBold(True)
+        self.net_worth_label.setFont(nw_font)
+        self.net_worth_label.setAlignment(Qt.AlignCenter)  # type: ignore[attr-defined]
+        layout.addWidget(self.net_worth_label)
 
         panel.setLayout(layout)
         return panel
@@ -354,7 +376,16 @@ class MainWindow(QMainWindow):
             selected_account_id = self.current_account.id
 
         self.account_list.clear()
-        accounts = self.service.get_all_accounts()
+        all_accounts = self.service.get_all_accounts()
+
+        # Apply account type filter
+        filter_type = self.account_type_filter.currentData()
+        accounts = (
+            [a for a in all_accounts if a.account_type == filter_type]
+            if filter_type is not None
+            else all_accounts
+        )
+
         selected_index = -1
 
         for index, account in enumerate(accounts):
@@ -363,7 +394,19 @@ class MainWindow(QMainWindow):
             if account.account_type == AccountType.SAVINGS and account.savings_subtype:
                 account_type_display = account.savings_subtype.value
 
-            balance_str = self.settings.format_currency(account.current_balance)
+            # For investment accounts show total portfolio value when prices are
+            # available; fall back to the raw cash balance.
+            if account.account_type == AccountType.INVESTMENT:
+                summary = self.service.get_portfolio_summary(account.id)
+                display_balance = (
+                    summary.total_value
+                    if summary.total_value is not None
+                    else account.current_balance
+                )
+            else:
+                display_balance = account.current_balance
+
+            balance_str = self.settings.format_currency(display_balance)
             item = QListWidgetItem(f"{account.name} ({account_type_display}) - {balance_str}")
             item.setData(Qt.UserRole, account.id)  # type: ignore[attr-defined]  # type: ignore[attr-defined]
             self.account_list.addItem(item)
@@ -374,6 +417,26 @@ class MainWindow(QMainWindow):
             self.account_list.setCurrentRow(selected_index if selected_index >= 0 else 0)
         else:
             self.current_account = None
+
+        self._update_net_worth()
+
+    def _update_net_worth(self) -> None:
+        """Recalculate and display net worth across all accounts."""
+        from decimal import Decimal as _D
+
+        total = _D("0")
+        for account in self.service.get_all_accounts():
+            if account.account_type == AccountType.INVESTMENT:
+                summary = self.service.get_portfolio_summary(account.id)
+                value = (
+                    summary.total_value
+                    if summary.total_value is not None
+                    else account.current_balance
+                )
+            else:
+                value = account.current_balance
+            total += value
+        self.net_worth_label.setText(f"Net Worth: {self.settings.format_currency(total)}")
 
     def account_selected(self, index: int) -> None:
         """Handle account selection."""

@@ -137,7 +137,8 @@ class Storage:
                 name TEXT NOT NULL,
                 ticker_symbol TEXT,
                 security_type TEXT NOT NULL,
-                notes TEXT
+                notes TEXT,
+                currency TEXT NOT NULL DEFAULT ''
             )
         """
         )
@@ -215,10 +216,16 @@ class Storage:
                 name TEXT NOT NULL,
                 ticker_symbol TEXT,
                 security_type TEXT NOT NULL,
-                notes TEXT
+                notes TEXT,
+                currency TEXT NOT NULL DEFAULT ''
             )
         """
         )
+        # Add currency column to existing securities tables that predate this field
+        cursor.execute("PRAGMA table_info(securities)")
+        sec_cols = [row[1] for row in cursor.fetchall()]
+        if "currency" not in sec_cols:
+            cursor.execute("ALTER TABLE securities ADD COLUMN currency TEXT NOT NULL DEFAULT ''")
         cursor.execute(
             """
             CREATE TABLE IF NOT EXISTS security_prices (
@@ -658,8 +665,8 @@ class Storage:
         cursor = self.conn.cursor()
         cursor.execute(
             """
-            INSERT OR REPLACE INTO securities (id, name, ticker_symbol, security_type, notes)
-            VALUES (?, ?, ?, ?, ?)
+            INSERT OR REPLACE INTO securities (id, name, ticker_symbol, security_type, notes, currency)
+            VALUES (?, ?, ?, ?, ?, ?)
         """,
             (
                 security.id,
@@ -667,6 +674,7 @@ class Storage:
                 security.ticker_symbol,
                 security.security_type.value,
                 security.notes,
+                security.currency,
             ),
         )
         self.conn.commit()
@@ -692,12 +700,14 @@ class Storage:
         self.conn.commit()
 
     def _row_to_security(self, row: Any) -> Security:
+        keys = row.keys() if hasattr(row, "keys") else []
         return Security(
             id=row["id"],
             name=row["name"],
             ticker_symbol=row["ticker_symbol"] or "",
             security_type=SecurityType(row["security_type"]),
             notes=row["notes"] or "",
+            currency=row["currency"] if "currency" in keys else "",
         )
 
     # -----------------------------------------------------------------------

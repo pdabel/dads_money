@@ -22,6 +22,7 @@ from PySide6.QtWidgets import (
 from ..models import Account, InvestmentTransaction, InvestmentTransactionType
 from ..services import MoneyService
 from .investment_dialogs import (
+    CashReconcileDialog,
     InvestmentTransactionDialog,
     ManageSecuritiesDialog,
     PriceFetchWorker,
@@ -120,7 +121,8 @@ class InvestmentPanel(QWidget):
         btn_fetch = QPushButton("Fetch Prices")
         btn_chart = QPushButton("View Chart")
         btn_manage = QPushButton("Manage Securities")
-        for btn in (btn_buy, btn_sell, btn_price, btn_fetch, btn_chart, btn_manage):
+        btn_reconcile = QPushButton("Reconcile Cash")
+        for btn in (btn_buy, btn_sell, btn_price, btn_fetch, btn_chart, btn_manage, btn_reconcile):
             btn_bar.addWidget(btn)
         btn_bar.addStretch()
         vbox.addLayout(btn_bar)
@@ -131,6 +133,7 @@ class InvestmentPanel(QWidget):
         btn_fetch.clicked.connect(self._on_fetch_prices)
         btn_chart.clicked.connect(self._on_view_chart)
         btn_manage.clicked.connect(self._on_manage_securities)
+        btn_reconcile.clicked.connect(self._on_reconcile_cash)
 
         # Holdings table
         self.holdings_table = QTableWidget()
@@ -167,6 +170,7 @@ class InvestmentPanel(QWidget):
         self.txn_table.setColumnCount(len(self.TXN_COLUMNS))
         self.txn_table.setHorizontalHeaderLabels(self.TXN_COLUMNS)
         self.txn_table.setSelectionBehavior(QTableWidget.SelectRows)  # type: ignore[attr-defined]
+        self.txn_table.setSelectionMode(QTableWidget.ExtendedSelection)  # type: ignore[attr-defined]
         self.txn_table.setEditTriggers(QTableWidget.NoEditTriggers)  # type: ignore[attr-defined]
         self.txn_table.horizontalHeader().setStretchLastSection(True)
         self.txn_table.doubleClicked.connect(self._on_edit_txn)
@@ -209,9 +213,16 @@ class InvestmentPanel(QWidget):
                 row, 4, _cell(self.settings.format_currency(h.avg_cost), right)
             )
             if h.current_price is not None:
-                self.holdings_table.setItem(
-                    row, 5, _cell(self.settings.format_currency(h.current_price), right)
-                )
+                # Use up to 6 decimal places for unit prices, stripping trailing zeros
+                # but keeping at least the currency's standard decimal places.
+                min_dp = self.settings.decimal_places
+                price_str = f"{h.current_price:.6f}".rstrip("0")
+                if "." in price_str:
+                    integer_part, frac_part = price_str.split(".")
+                    frac_part = frac_part.ljust(min_dp, "0")
+                    price_str = f"{integer_part}.{frac_part}"
+                price_str = self.settings.currency_symbol + price_str
+                self.holdings_table.setItem(row, 5, _cell(price_str, right))
                 self.holdings_table.setItem(
                     row, 6, _cell(self.settings.format_currency(h.market_value), right)
                 )
@@ -301,12 +312,49 @@ class InvestmentPanel(QWidget):
         dialog = InvestmentTransactionDialog(self, self.service, self.account, txn, preset_type)
         if dialog.exec() == QDialog.Accepted:  # type: ignore[attr-defined]
             data = dialog.get_data()
+            transfer_account_id = data.pop("transfer_account_id", None)
+
+            # If proceeds are transferred out, zero the cash impact on this account
+            # after creation (service always computes amount from qty/price).
             if txn is None:
-                self.service.create_investment_transaction(**data)
+                new_txn = self.service.create_investment_transaction(**data)
             else:
                 for k, v in data.items():
                     setattr(txn, k, v)
                 self.service.update_investment_transaction(txn)
+                new_txn = txn
+
+            if transfer_account_id:
+                new_txn.amount = Decimal("0")
+                self.service.update_investment_transaction(new_txn, force_amount=Decimal("0"))
+
+            # Create a matching deposit in the target account.
+            if transfer_account_id:
+                qty = data.get("quantity", Decimal("0"))
+                price = data.get("price", Decimal("0"))
+                commission = data.get("commission", Decimal("0"))
+                proceeds = qty * price - commission if (qty and price) else Decimal("0")
+                security_name = ""
+                if data.get("security_id"):
+                    sec = next(
+                        (
+                            s
+                            for s in self.service.get_all_securities()
+                            if s.id == data["security_id"]
+                        ),
+                        None,
+                    )
+                    if sec:
+                        security_name = sec.name
+                self.service.create_transaction(
+                    account_id=transfer_account_id,
+                    date=data["txn_date"],
+                    amount=float(proceeds),
+                    payee=f"Sale: {security_name}".strip(": "),
+                    memo=data.get("memo", ""),
+                    status=data.get("status"),
+                )
+
             self.refresh()
 
     def _on_update_price(self) -> None:
@@ -329,7 +377,7 @@ class InvestmentPanel(QWidget):
 
     def _on_fetch_prices(self) -> None:
         securities = self.service.get_all_securities()
-        tickers = [(s.id, s.ticker_symbol) for s in securities if s.ticker_symbol]
+        tickers = [(s.id, s.ticker_symbol, s.currency) for s in securities if s.ticker_symbol]
         if not tickers:
             QMessageBox.information(
                 self,
@@ -338,6 +386,7 @@ class InvestmentPanel(QWidget):
             )
             return
         self._fetch_worker = PriceFetchWorker(tickers, self.service)
+        self._fetch_worker.price_fetched.connect(self._on_price_fetched)
         self._fetch_worker.finished.connect(self._on_fetch_done)
         self._fetch_worker.error.connect(self._on_fetch_error)
         self._fetch_worker.start()
@@ -348,8 +397,22 @@ class InvestmentPanel(QWidget):
         if hasattr(win, "statusBar"):
             win.statusBar().showMessage(msg)
 
-    def _on_fetch_done(self, updated: int) -> None:
-        self.statusBar_message(f"Fetched prices for {updated} securities.")
+    def _on_price_fetched(self, security_id: str, price: object) -> None:
+        """Save a single fetched price on the main thread (SQLite thread-safety)."""
+        from datetime import date as _date
+        from decimal import Decimal
+
+        self.service.add_security_price(
+            security_id, _date.today(), Decimal(str(price)), source="api"
+        )
+
+    def _on_fetch_done(self, updated: int, failed: list) -> None:
+        msg = f"Fetched prices for {updated} security/securities."
+        if failed:
+            msg += f"\n\nCould not fetch: {', '.join(failed)}\n\nTip: UK stocks need a .L suffix (e.g. LLOY.L). Edit the security to correct the ticker symbol."
+            QMessageBox.warning(self, "Some Prices Not Found", msg)
+        else:
+            self.statusBar_message(msg)
         self.refresh()
 
     def _on_fetch_error(self, msg: str) -> None:
@@ -381,6 +444,41 @@ class InvestmentPanel(QWidget):
         dialog.exec()
         self.refresh()
 
+    def _on_reconcile_cash(self) -> None:
+        summary = self.service.get_portfolio_summary(self.account.id)
+        dialog = CashReconcileDialog(self, summary.cash_balance, self.settings)
+        if dialog.exec() == QDialog.Accepted:  # type: ignore[attr-defined]
+            stmt_date, adjustment, memo = dialog.get_data()
+            if adjustment == Decimal("0"):
+                QMessageBox.information(
+                    self,
+                    "No Adjustment Needed",
+                    "The calculated balance already matches the statement balance.",
+                )
+                return
+            from ..models import InvestmentTransactionType, TransactionStatus
+
+            txn_type = (
+                InvestmentTransactionType.MISC_INC
+                if adjustment > Decimal("0")
+                else InvestmentTransactionType.MISC_EXP
+            )
+            self.service.create_investment_transaction(
+                account_id=self.account.id,
+                transaction_type=txn_type,
+                txn_date=stmt_date,
+                security_id=None,
+                quantity=Decimal("0"),
+                price=abs(adjustment),
+                commission=Decimal("0"),
+                memo=memo or "Cash reconciliation adjustment",
+                status=TransactionStatus.RECONCILED,
+            )
+            self.refresh()
+            self.statusBar_message(
+                f"Cash balance adjusted by {self.settings.format_currency(adjustment)}."
+            )
+
     # ------------------------------------------------------------------
     # Transactions toolbar actions
     # ------------------------------------------------------------------
@@ -401,19 +499,25 @@ class InvestmentPanel(QWidget):
             self._open_txn_dialog(txn=txn)
 
     def _on_delete_txn(self) -> None:
-        row = self.txn_table.currentRow()
-        if row < 0:
+        selected_rows = self.txn_table.selectionModel().selectedRows()
+        if not selected_rows:
             return
-        item = self.txn_table.item(row, 0)
-        if not item:
+        # Collect unique transaction IDs from column 0 of each selected row
+        txn_ids = []
+        for index in selected_rows:
+            item = self.txn_table.item(index.row(), 0)
+            if item:
+                txn_ids.append(item.data(Qt.UserRole))  # type: ignore[attr-defined]
+        if not txn_ids:
             return
-        txn_id = item.data(Qt.UserRole)  # type: ignore[attr-defined]
+        n = len(txn_ids)
         reply = QMessageBox.question(
             self,
-            "Delete Transaction",
-            "Delete this investment transaction?",
+            "Delete Transaction" + ("s" if n > 1 else ""),
+            f"Delete {n} investment transaction{'s' if n > 1 else ''}?",
             QMessageBox.Yes | QMessageBox.No,  # type: ignore[attr-defined]
         )
         if reply == QMessageBox.Yes:  # type: ignore[attr-defined]
-            self.service.delete_investment_transaction(txn_id, self.account.id)
+            for txn_id in txn_ids:
+                self.service.delete_investment_transaction(txn_id, self.account.id)
             self.refresh()
