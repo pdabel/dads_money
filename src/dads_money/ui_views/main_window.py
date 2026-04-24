@@ -18,6 +18,7 @@ from PySide6.QtWidgets import (
     QListWidget,
     QListWidgetItem,
     QMainWindow,
+    QMenu,
     QMessageBox,
     QPushButton,
     QSplitter,
@@ -213,7 +214,15 @@ class MainWindow(QMainWindow):
         # Account list
         self.account_list = QListWidget()
         self.account_list.currentRowChanged.connect(self.account_selected)
+        self.account_list.setContextMenuPolicy(Qt.CustomContextMenu)  # type: ignore[attr-defined]
+        self.account_list.customContextMenuRequested.connect(self._account_context_menu)
         layout.addWidget(self.account_list)
+
+        # Show hidden accounts checkbox
+        self.show_hidden_checkbox = QCheckBox("Show hidden accounts")
+        self.show_hidden_checkbox.setChecked(False)
+        self.show_hidden_checkbox.stateChanged.connect(lambda _: self.load_accounts())
+        layout.addWidget(self.show_hidden_checkbox)
 
         # Buttons
         btn_layout = QHBoxLayout()
@@ -376,7 +385,8 @@ class MainWindow(QMainWindow):
             selected_account_id = self.current_account.id
 
         self.account_list.clear()
-        all_accounts = self.service.get_all_accounts()
+        include_hidden = self.show_hidden_checkbox.isChecked()
+        all_accounts = self.service.get_all_accounts(include_hidden=include_hidden)
 
         # Apply account type filter
         filter_type = self.account_type_filter.currentData()
@@ -407,8 +417,13 @@ class MainWindow(QMainWindow):
                 display_balance = account.current_balance
 
             balance_str = self.settings.format_currency(display_balance)
-            item = QListWidgetItem(f"{account.name} ({account_type_display}) - {balance_str}")
+            label = f"{account.name} ({account_type_display}) - {balance_str}"
+            if account.hidden:
+                label += " [hidden]"
+            item = QListWidgetItem(label)
             item.setData(Qt.UserRole, account.id)  # type: ignore[attr-defined]  # type: ignore[attr-defined]
+            if account.hidden:
+                item.setForeground(QColor("gray"))
             self.account_list.addItem(item)
             if account.id == selected_account_id:
                 selected_index = index
@@ -419,6 +434,35 @@ class MainWindow(QMainWindow):
             self.current_account = None
 
         self._update_net_worth()
+
+    def _account_context_menu(self, pos: Any) -> None:
+        """Show right-click context menu on the account list."""
+        item = self.account_list.itemAt(pos)
+        if not item:
+            return
+        account_id = item.data(Qt.UserRole)  # type: ignore[attr-defined]
+        account = self.service.get_account(account_id)
+        if not account:
+            return
+
+        menu = QMenu(self)
+        if account.hidden:
+            action = menu.addAction("Unhide Account")
+        else:
+            action = menu.addAction("Hide Account")
+        chosen = menu.exec(self.account_list.viewport().mapToGlobal(pos))
+        if chosen is action:
+            self.toggle_account_hidden(account)
+
+    def toggle_account_hidden(self, account: Account) -> None:
+        """Toggle the hidden state of an account."""
+        account.hidden = not account.hidden
+        self.service.update_account(account)
+        if account.hidden and self.current_account and self.current_account.id == account.id:
+            self.current_account = None
+        verb = "hidden" if account.hidden else "unhidden"
+        self.load_accounts()
+        self.statusBar().showMessage(f"Account '{account.name}' {verb}")
 
     def _update_net_worth(self) -> None:
         """Recalculate and display net worth across all accounts."""

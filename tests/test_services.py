@@ -404,3 +404,88 @@ class TestPayeeServices:
             assert "To Delete" not in payees
         finally:
             service.close()
+
+
+class TestImportDeduplication:
+    """Tests for duplicate-suppression during file imports."""
+
+    def _make_qif(self, tmp_path: Path, entries: list[dict]) -> str:
+        """Write a minimal QIF bank file and return the path as str."""
+        lines = ["!Type:Bank"]
+        for e in entries:
+            lines.append(f"D{e['date']}")
+            lines.append(f"T{e['amount']}")
+            lines.append(f"P{e['payee']}")
+            lines.append("^")
+        qif_file = tmp_path / "test.qif"
+        qif_file.write_text("\n".join(lines))
+        return str(qif_file)
+
+    def test_qif_import_no_duplicates_on_reimport(self, temp_db: Path, tmp_path: Path) -> None:
+        """Re-importing the same QIF file must not create duplicate transactions."""
+        service = MoneyService(temp_db)
+        try:
+            account = service.create_account("Checking", AccountType.CHECKING)
+            entries = [
+                {"date": "01/15/2024", "amount": "-50.00", "payee": "Supermarket"},
+                {"date": "01/16/2024", "amount": "1000.00", "payee": "Employer"},
+            ]
+            qif_path = self._make_qif(tmp_path, entries)
+
+            first = service.import_qif(qif_path, account.id)
+            assert first == 2
+
+            second = service.import_qif(qif_path, account.id)
+            assert second == 0, "Re-import should skip all duplicates"
+
+            txns = service.get_transactions_for_account(account.id)
+            assert len(txns) == 2
+        finally:
+            service.close()
+
+    def test_qif_import_only_new_transactions_added(self, temp_db: Path, tmp_path: Path) -> None:
+        """A second import with one existing and one new entry adds only the new one."""
+        service = MoneyService(temp_db)
+        try:
+            account = service.create_account("Checking", AccountType.CHECKING)
+
+            first_qif = tmp_path / "first.qif"
+            first_qif.write_text("!Type:Bank\nD02/01/2024\nT-10.00\nPCoffee\n^\n")
+            service.import_qif(str(first_qif), account.id)
+
+            # Second file: same transaction plus a new one
+            second_qif = tmp_path / "second.qif"
+            second_qif.write_text(
+                "!Type:Bank\nD02/01/2024\nT-10.00\nPCoffee\n^\n"
+                "D02/02/2024\nT-20.00\nPBookshop\n^\n"
+            )
+            added = service.import_qif(str(second_qif), account.id)
+            assert added == 1
+
+            txns = service.get_transactions_for_account(account.id)
+            assert len(txns) == 2
+        finally:
+            service.close()
+
+    def test_csv_import_no_duplicates_on_reimport(self, temp_db: Path, tmp_path: Path) -> None:
+        """Re-importing the same CSV file must not create duplicate transactions."""
+        csv_file = tmp_path / "test.csv"
+        csv_file.write_text(
+            "Date,Payee,Amount,Memo,Status\n"
+            "2024-03-01,Landlord,-800.00,Rent,\n"
+            "2024-03-02,Salary,2500.00,Monthly pay,\n"
+        )
+        service = MoneyService(temp_db)
+        try:
+            account = service.create_account("Checking", AccountType.CHECKING)
+
+            first = service.import_csv(str(csv_file), account.id)
+            assert first == 2
+
+            second = service.import_csv(str(csv_file), account.id)
+            assert second == 0
+
+            txns = service.get_transactions_for_account(account.id)
+            assert len(txns) == 2
+        finally:
+            service.close()

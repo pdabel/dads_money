@@ -35,6 +35,8 @@ class InvestmentImportRecord:
     memo: str
     status: TransactionStatus
     is_transfer: bool = False  # True for BuyX/SellX/DivX etc. — no cash impact on this account
+    linked_account_name: str = ""  # From L[Account Name] field
+    transfer_amount: Decimal = Decimal("0")  # From $ field (cash moved in linked account)
 
 
 # ---------------------------------------------------------------------------
@@ -280,6 +282,8 @@ class InvestmentQIFParser:
         rec_memo: str = ""
         rec_status: TransactionStatus = TransactionStatus.UNCLEARED
         rec_is_transfer: bool = False
+        rec_linked_account: str = ""
+        rec_transfer_amount: Decimal = Decimal("0")
         rec_started: bool = False
 
         def _flush() -> None:
@@ -296,6 +300,8 @@ class InvestmentQIFParser:
                         memo=rec_memo,
                         status=rec_status,
                         is_transfer=rec_is_transfer,
+                        linked_account_name=rec_linked_account,
+                        transfer_amount=rec_transfer_amount,
                     )
                 )
 
@@ -311,6 +317,8 @@ class InvestmentQIFParser:
                 "",
                 TransactionStatus.UNCLEARED,
                 False,  # is_transfer
+                "",  # linked_account_name
+                Decimal("0"),  # transfer_amount
                 False,  # started
             )
 
@@ -343,6 +351,8 @@ class InvestmentQIFParser:
                     rec_memo,
                     rec_status,
                     rec_is_transfer,
+                    rec_linked_account,
+                    rec_transfer_amount,
                     rec_started,
                 ) = _reset()
                 continue
@@ -380,6 +390,11 @@ class InvestmentQIFParser:
                     rec_status = TransactionStatus.CLEARED
                 else:
                     rec_status = TransactionStatus.UNCLEARED
+            elif field == "L":  # Linked/transfer account e.g. L[Account Name]
+                if value.startswith("[") and value.endswith("]"):
+                    rec_linked_account = value[1:-1]
+            elif field == "$":  # Cash amount transferred to/from the linked account
+                rec_transfer_amount = Decimal(value.replace(",", "")) if value else Decimal("0")
 
         # File may not end with ^
         _flush()

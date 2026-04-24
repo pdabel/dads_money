@@ -33,6 +33,17 @@ try:
 except ImportError:
     _YFINANCE_AVAILABLE = False
 
+# Investment transaction types where cash flows *into* the linked bank account
+_BANK_INCOME_TYPES = frozenset(
+    {
+        InvestmentTransactionType.SELL,
+        InvestmentTransactionType.DIV,
+        InvestmentTransactionType.INT_INC,
+        InvestmentTransactionType.MISC_INC,
+        InvestmentTransactionType.RETURN_CAPITAL,
+    }
+)
+
 
 class MoneyService:
     """Main application service coordinating storage and business logic."""
@@ -73,9 +84,11 @@ class MoneyService:
         """Get account by ID."""
         return self.storage.get_account(account_id)
 
-    def get_all_accounts(self, include_closed: bool = False) -> List[Account]:
+    def get_all_accounts(
+        self, include_closed: bool = False, include_hidden: bool = False
+    ) -> List[Account]:
         """Get all accounts."""
-        return self.storage.get_all_accounts(include_closed)
+        return self.storage.get_all_accounts(include_closed, include_hidden)
 
     def update_account(self, account: Account) -> None:
         """Update an existing account."""
@@ -186,6 +199,8 @@ class MoneyService:
         count = 0
         for trans in transactions:
             trans.account_id = account_id
+            if self.storage.transaction_exists(account_id, trans.date, trans.amount, trans.payee):
+                continue
             self.storage.save_transaction(trans)
             count += 1
         return count
@@ -228,6 +243,8 @@ class MoneyService:
         count = 0
         for trans in transactions:
             trans.account_id = account_id
+            if self.storage.transaction_exists(account_id, trans.date, trans.amount, trans.payee):
+                continue
             self.storage.save_transaction(trans)
             count += 1
         return count
@@ -246,6 +263,8 @@ class MoneyService:
         count = 0
         for trans in transactions:
             trans.account_id = account_id
+            if self.storage.transaction_exists(account_id, trans.date, trans.amount, trans.payee):
+                continue
             self.storage.save_transaction(trans)
             count += 1
         return count
@@ -265,6 +284,11 @@ class MoneyService:
 
         # Build a case-insensitive name → Security map once
         sec_by_name: dict = {s.name.lower(): s for s in self.storage.get_all_securities()}
+
+        # Build a case-insensitive name → Account map for linked-transfer synthesis
+        accts_by_name: dict = {
+            a.name.lower(): a for a in self.storage.get_all_accounts(include_closed=True)
+        }
 
         count = 0
         for rec in records:
@@ -300,6 +324,16 @@ class MoneyService:
             if security_id and rec.price != Decimal("0"):
                 self.add_security_price(security_id, rec.date, rec.price, source="import")
 
+            if self.storage.investment_transaction_exists(
+                account_id,
+                rec.date,
+                rec.transaction_type.value,
+                security_id,
+                rec.quantity,
+                amount,
+            ):
+                continue
+
             txn = InvestmentTransaction(
                 account_id=account_id,
                 security_id=security_id,
@@ -314,6 +348,36 @@ class MoneyService:
             )
             self.storage.save_investment_transaction(txn)
             count += 1
+
+            # Synthesise the matching bank-side transaction when the QIF
+            # recorded a linked account name (BuyX / SellX / DivX etc.)
+            if rec.is_transfer and rec.linked_account_name:
+                linked_acct = accts_by_name.get(rec.linked_account_name.lower())
+                if linked_acct:
+                    # Use the explicit $ amount if present, otherwise the T field
+                    cash = (
+                        rec.transfer_amount if rec.transfer_amount != Decimal("0") else rec.amount
+                    )
+                    # Sells/dividends etc. add cash; buys remove it
+                    if rec.transaction_type in _BANK_INCOME_TYPES:
+                        bank_amount = abs(cash)
+                    else:
+                        bank_amount = -abs(cash)
+                    bank_payee = rec.security_name or linked_acct.name
+                    if not self.storage.transaction_exists(
+                        linked_acct.id, rec.date, bank_amount, bank_payee
+                    ):
+                        bank_txn = Transaction(
+                            account_id=linked_acct.id,
+                            date=rec.date,
+                            payee=bank_payee,
+                            amount=bank_amount,
+                            memo=rec.memo,
+                            status=rec.status,
+                        )
+                        self.storage.save_transaction(bank_txn)
+                        count += 1
+
         return count
 
     # Payee operations

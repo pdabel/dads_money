@@ -103,6 +103,7 @@ class Account:
     institution: str = ""
     created_date: Date = field(default_factory=Date.today)
     closed: bool = False
+    hidden: bool = False
 
     def __post_init__(self) -> None:
         """Ensure balance is Decimal."""

@@ -208,6 +208,10 @@ class Storage:
             cursor.execute("ALTER TABLE accounts ADD COLUMN savings_subtype TEXT")
             self.conn.commit()
 
+        if "hidden" not in columns:
+            cursor.execute("ALTER TABLE accounts ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
+            self.conn.commit()
+
         # Ensure investment tables exist (safe for existing databases)
         cursor.execute(
             """
@@ -321,8 +325,8 @@ class Storage:
             """
             INSERT OR REPLACE INTO accounts
             (id, name, account_type, savings_subtype, opening_balance, current_balance, description,
-             account_number, institution, created_date, closed)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             account_number, institution, created_date, closed, hidden)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 account.id,
@@ -336,6 +340,7 @@ class Storage:
                 account.institution,
                 account.created_date.isoformat(),
                 int(account.closed),
+                int(account.hidden),
             ),
         )
         self.conn.commit()
@@ -348,12 +353,19 @@ class Storage:
             return None
         return self._row_to_account(row)
 
-    def get_all_accounts(self, include_closed: bool = False) -> List[Account]:
+    def get_all_accounts(
+        self, include_closed: bool = False, include_hidden: bool = False
+    ) -> List[Account]:
         """Get all accounts."""
         cursor = self.conn.cursor()
-        query = "SELECT * FROM accounts"
+        conditions = []
         if not include_closed:
-            query += " WHERE closed = 0"
+            conditions.append("closed = 0")
+        if not include_hidden:
+            conditions.append("hidden = 0")
+        query = "SELECT * FROM accounts"
+        if conditions:
+            query += " WHERE " + " AND ".join(conditions)
         query += " ORDER BY name"
         rows = cursor.execute(query).fetchall()
         return [self._row_to_account(row) for row in rows]
@@ -391,6 +403,7 @@ class Storage:
             institution=row["institution"] or "",
             created_date=date.fromisoformat(row["created_date"]),
             closed=bool(row["closed"]),
+            hidden=bool(row["hidden"]) if "hidden" in row.keys() else False,
         )
 
     # Category operations
@@ -495,6 +508,55 @@ class Storage:
 
         self.conn.commit()
         self._update_account_balance(transaction.account_id)
+
+    def transaction_exists(self, account_id: str, txn_date: Any, amount: Any, payee: str) -> bool:
+        """Return True if a transaction with the same account/date/amount/payee already exists."""
+        cursor = self.conn.cursor()
+        row = cursor.execute(
+            """
+            SELECT 1 FROM transactions
+            WHERE account_id = ? AND date = ? AND amount = ? AND payee = ?
+            LIMIT 1
+            """,
+            (
+                account_id,
+                txn_date if isinstance(txn_date, str) else txn_date.isoformat(),
+                str(amount),
+                payee,
+            ),
+        ).fetchone()
+        return row is not None
+
+    def investment_transaction_exists(
+        self,
+        account_id: str,
+        txn_date: Any,
+        transaction_type: str,
+        security_id: Optional[str],
+        quantity: Any,
+        amount: Any,
+    ) -> bool:
+        """Return True if a matching investment transaction already exists."""
+        cursor = self.conn.cursor()
+        row = cursor.execute(
+            """
+            SELECT 1 FROM investment_transactions
+            WHERE account_id = ? AND date = ? AND transaction_type = ?
+              AND (security_id IS ? OR security_id = ?)
+              AND quantity = ? AND amount = ?
+            LIMIT 1
+            """,
+            (
+                account_id,
+                txn_date if isinstance(txn_date, str) else txn_date.isoformat(),
+                transaction_type,
+                security_id,
+                security_id,
+                str(quantity),
+                str(amount),
+            ),
+        ).fetchone()
+        return row is not None
 
     def get_transaction(self, transaction_id: str) -> Optional[Transaction]:
         """Get transaction by ID."""

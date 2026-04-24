@@ -286,3 +286,119 @@ def test_portfolio_summary_no_prices(service: MoneyService, inv_account, aapl) -
     summary = service.get_portfolio_summary(inv_account.id)
     assert summary.holdings_value is None
     assert summary.total_value is None
+
+
+# ---------------------------------------------------------------------------
+# QIF investment import — linked bank account synthesis
+# ---------------------------------------------------------------------------
+
+
+def _write_qif(path: Path, content: str) -> str:
+    path.write_text(content)
+    return str(path)
+
+
+def test_buyx_creates_bank_debit(service: MoneyService, tmp_path: Path) -> None:
+    """BuyX in investment QIF creates a matching debit in the linked bank account."""
+    bank = service.create_account("ZZZ Halifax plc DG & C", AccountType.CHECKING)
+    inv = service.create_account("My ISA", AccountType.INVESTMENT)
+
+    qif = _write_qif(
+        tmp_path / "inv.qif",
+        "!Type:Invst\n"
+        "D5/6/1999\n"
+        "T448.07\n"
+        "L[ZZZ Halifax plc DG & C]\n"
+        "$448.07\n"
+        "NBuyX\n"
+        "YLLoydsTSB Ord. Shares\n"
+        "I1.255098\n"
+        "Q357\n"
+        "O\n"
+        "^\n",
+    )
+
+    service.import_qif(qif, inv.id)
+
+    bank_txns = service.get_transactions_for_account(bank.id)
+    assert len(bank_txns) == 1
+    assert bank_txns[0].amount == Decimal("-448.07")
+    assert bank_txns[0].payee == "LLoydsTSB Ord. Shares"
+
+
+def test_sellx_creates_bank_credit(service: MoneyService, tmp_path: Path) -> None:
+    """SellX in investment QIF creates a matching credit in the linked bank account."""
+    bank = service.create_account("Current Account", AccountType.CHECKING)
+    inv = service.create_account("Stocks ISA", AccountType.INVESTMENT)
+
+    qif = _write_qif(
+        tmp_path / "sell.qif",
+        "!Type:Invst\n"
+        "D1/15/2000\n"
+        "T500.00\n"
+        "L[Current Account]\n"
+        "$500.00\n"
+        "NSellX\n"
+        "YAcme Corp\n"
+        "I5.00\n"
+        "Q100\n"
+        "O\n"
+        "^\n",
+    )
+
+    service.import_qif(qif, inv.id)
+
+    bank_txns = service.get_transactions_for_account(bank.id)
+    assert len(bank_txns) == 1
+    assert bank_txns[0].amount == Decimal("500.00")
+
+
+def test_buyx_no_linked_account_skips_bank(service: MoneyService, tmp_path: Path) -> None:
+    """BuyX with an unknown linked account does not raise; bank entry is skipped."""
+    inv = service.create_account("My ISA", AccountType.INVESTMENT)
+
+    qif = _write_qif(
+        tmp_path / "inv.qif",
+        "!Type:Invst\n"
+        "D5/6/1999\n"
+        "T448.07\n"
+        "L[NonExistentBank]\n"
+        "$448.07\n"
+        "NBuyX\n"
+        "YSome Share\n"
+        "I1.00\n"
+        "Q100\n"
+        "O\n"
+        "^\n",
+    )
+
+    count = service.import_qif(qif, inv.id)
+    # Only the investment transaction is counted; no bank transaction
+    assert count == 1
+
+
+def test_buyx_bank_debit_not_duplicated(service: MoneyService, tmp_path: Path) -> None:
+    """Re-importing the same QIF does not add duplicate bank entries."""
+    bank = service.create_account("ZZZ Halifax plc DG & C", AccountType.CHECKING)
+    inv = service.create_account("My ISA", AccountType.INVESTMENT)
+
+    content = (
+        "!Type:Invst\n"
+        "D5/6/1999\n"
+        "T448.07\n"
+        "L[ZZZ Halifax plc DG & C]\n"
+        "$448.07\n"
+        "NBuyX\n"
+        "YLLoydsTSB Ord. Shares\n"
+        "I1.255098\n"
+        "Q357\n"
+        "O\n"
+        "^\n"
+    )
+    qif = _write_qif(tmp_path / "inv.qif", content)
+
+    service.import_qif(qif, inv.id)
+    service.import_qif(qif, inv.id)
+
+    bank_txns = service.get_transactions_for_account(bank.id)
+    assert len(bank_txns) == 1
