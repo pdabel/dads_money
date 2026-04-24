@@ -43,9 +43,13 @@ class Settings:
         "window_height": 700,
     }
 
-    def __init__(self) -> None:
+    def __init__(self, settings_file: Optional[Path] = None) -> None:
         """Initialize settings."""
-        self.settings_file = Config.get_user_data_dir() / "settings.json"
+        self.settings_file = (
+            settings_file
+            if settings_file is not None
+            else Config.get_user_data_dir() / "settings.json"
+        )
         self._settings = self.DEFAULT_SETTINGS.copy()
         self.load()
 
