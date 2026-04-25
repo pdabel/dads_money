@@ -156,14 +156,16 @@ class InvestmentPanel(QWidget):
         btn_bar = QHBoxLayout()
         btn_new = QPushButton("New")
         btn_edit = QPushButton("Edit")
+        btn_duplicate = QPushButton("Duplicate")
         btn_delete = QPushButton("Delete")
-        for btn in (btn_new, btn_edit, btn_delete):
+        for btn in (btn_new, btn_edit, btn_duplicate, btn_delete):
             btn_bar.addWidget(btn)
         btn_bar.addStretch()
         vbox.addLayout(btn_bar)
 
         btn_new.clicked.connect(self._on_new_txn)
         btn_edit.clicked.connect(self._on_edit_txn)
+        btn_duplicate.clicked.connect(self._on_duplicate_txn)
         btn_delete.clicked.connect(self._on_delete_txn)
 
         self.txn_table = QTableWidget()
@@ -190,6 +192,10 @@ class InvestmentPanel(QWidget):
         self.load_holdings()
         self.load_investment_transactions()
         self.update_summary()
+        # Keep the account list panel in sync
+        win = self.window()
+        if hasattr(win, "_refresh_account_list_item"):
+            win._refresh_account_list_item(self.account.id)
 
     def load_holdings(self) -> None:
         holdings = self.service.get_holdings_for_account(self.account.id)
@@ -497,6 +503,25 @@ class InvestmentPanel(QWidget):
         txn = self.service.get_investment_transaction(txn_id)
         if txn:
             self._open_txn_dialog(txn=txn)
+
+    def _on_duplicate_txn(self) -> None:
+        row = self.txn_table.currentRow()
+        if row < 0:
+            return
+        item = self.txn_table.item(row, 0)
+        if not item:
+            return
+        txn_id = item.data(Qt.UserRole)  # type: ignore[attr-defined]
+        txn = self.service.get_investment_transaction(txn_id)
+        if not txn:
+            return
+        dialog = InvestmentTransactionDialog(self, self.service, self.account, txn)
+        dialog.setWindowTitle("Duplicate Investment Transaction")
+        if dialog.exec() == QDialog.Accepted:  # type: ignore[attr-defined]
+            data = dialog.get_data()
+            data.pop("transfer_account_id", None)
+            self.service.create_investment_transaction(**data)
+            self.refresh()
 
     def _on_delete_txn(self) -> None:
         selected_rows = self.txn_table.selectionModel().selectedRows()

@@ -230,8 +230,11 @@ class MainWindow(QMainWindow):
         new_btn.clicked.connect(self.new_account)
         edit_btn = QPushButton("Edit")
         edit_btn.clicked.connect(self.edit_account)
+        delete_btn = QPushButton("Delete")
+        delete_btn.clicked.connect(self.delete_account)
         btn_layout.addWidget(new_btn)
         btn_layout.addWidget(edit_btn)
+        btn_layout.addWidget(delete_btn)
         layout.addLayout(btn_layout)
 
         # Net worth footer
@@ -283,10 +286,13 @@ class MainWindow(QMainWindow):
         new_btn.clicked.connect(self.new_transaction)
         edit_btn = QPushButton("Edit")
         edit_btn.clicked.connect(self.edit_transaction)
+        duplicate_btn = QPushButton("Duplicate")
+        duplicate_btn.clicked.connect(self.duplicate_transaction)
         delete_btn = QPushButton("Delete")
         delete_btn.clicked.connect(self.delete_transaction)
         btn_layout.addWidget(new_btn)
         btn_layout.addWidget(edit_btn)
+        btn_layout.addWidget(duplicate_btn)
         btn_layout.addWidget(delete_btn)
         btn_layout.addStretch()
         layout.addLayout(btn_layout)
@@ -464,6 +470,34 @@ class MainWindow(QMainWindow):
         self.load_accounts()
         self.statusBar().showMessage(f"Account '{account.name}' {verb}")
 
+    def _refresh_account_list_item(self, account_id: str) -> None:
+        """Update the label for a single account in the account list without triggering selection."""
+        account = self.service.get_account(account_id)
+        if not account:
+            return
+        for i in range(self.account_list.count()):
+            item = self.account_list.item(i)
+            if item and item.data(Qt.UserRole) == account_id:  # type: ignore[attr-defined]
+                account_type_display = account.account_type.value
+                if account.account_type == AccountType.SAVINGS and account.savings_subtype:
+                    account_type_display = account.savings_subtype.value
+                if account.account_type == AccountType.INVESTMENT:
+                    summary = self.service.get_portfolio_summary(account.id)
+                    display_balance = (
+                        summary.total_value
+                        if summary.total_value is not None
+                        else account.current_balance
+                    )
+                else:
+                    display_balance = account.current_balance
+                balance_str = self.settings.format_currency(display_balance)
+                label = f"{account.name} ({account_type_display}) - {balance_str}"
+                if account.hidden:
+                    label += " [hidden]"
+                item.setText(label)
+                break
+        self._update_net_worth()
+
     def _update_net_worth(self) -> None:
         """Recalculate and display net worth across all accounts."""
         from decimal import Decimal as _D
@@ -636,6 +670,30 @@ class MainWindow(QMainWindow):
             self.load_accounts(self.current_account.id)
             self.statusBar().showMessage(f"Account '{account_data['name']}' updated")
 
+    def delete_account(self) -> None:
+        """Delete the selected account."""
+        if not self.current_account:
+            QMessageBox.warning(self, "No Account", "Please select an account to delete.")
+            return
+
+        reply = QMessageBox.question(
+            self,
+            "Confirm Delete",
+            f"Delete account '{self.current_account.name}'?\n\nThis will permanently delete the account and all its transactions.",
+            QMessageBox.Yes | QMessageBox.No,  # type: ignore[attr-defined]
+        )
+        if reply == QMessageBox.Yes:  # type: ignore[attr-defined]
+            name = self.current_account.name
+            account_id = self.current_account.id
+            try:
+                self.service.delete_account(account_id)
+            except Exception as e:
+                QMessageBox.critical(self, "Delete Failed", f"Could not delete account: {e}")
+                return
+            self.current_account = None
+            self.load_accounts()
+            self.statusBar().showMessage(f"Account '{name}' deleted")
+
     def new_transaction(self) -> None:
         """Create a new transaction."""
         if not self.current_account:
@@ -687,6 +745,38 @@ class MainWindow(QMainWindow):
                 self.service.update_transaction(transaction)
                 self.load_accounts(self.current_account.id)
                 self.statusBar().showMessage("Transaction updated")
+
+    def duplicate_transaction(self) -> None:
+        """Duplicate the selected transaction."""
+        row = self.transaction_table.currentRow()
+        if row < 0:
+            QMessageBox.warning(self, "No Selection", "Please select a transaction to duplicate.")
+            return
+
+        item = self.transaction_table.item(row, 0)
+        if not item or self.current_account is None:
+            return
+
+        trans_id = item.data(Qt.UserRole)  # type: ignore[attr-defined]
+        transaction = self.service.get_transaction(trans_id)
+        if not transaction:
+            return
+
+        dialog = TransactionDialog(self, self.service, self.current_account, transaction)
+        dialog.setWindowTitle("Duplicate Transaction")
+        if dialog.exec() == QDialog.Accepted:  # type: ignore[attr-defined]
+            trans_data = dialog.get_data()
+            new_trans = Transaction(
+                account_id=self.current_account.id,
+                date=trans_data["date"],
+                payee=trans_data["payee"],
+                memo=trans_data["memo"],
+                amount=trans_data["amount"],
+                status=trans_data["status"],
+            )
+            self.service.update_transaction(new_trans)
+            self.load_accounts(self.current_account.id)
+            self.statusBar().showMessage("Transaction duplicated")
 
     def delete_transaction(self) -> None:
         """Delete the selected transaction."""
