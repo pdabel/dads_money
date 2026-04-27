@@ -17,6 +17,7 @@ from .models import (
     InvestmentTransaction,
     InvestmentTransactionType,
     PortfolioSummary,
+    SavingsAccountType,
     Security,
     SecurityPrice,
     SecurityType,
@@ -66,6 +67,7 @@ class MoneyService:
         account_type: Any,
         opening_balance: float = 0.0,
         savings_subtype: Any = None,
+        owner: str = "",
     ) -> Account:
         """Create a new account."""
 
@@ -76,6 +78,7 @@ class MoneyService:
             savings_subtype=savings_subtype,
             opening_balance=balance,
             current_balance=balance,
+            owner=owner,
         )
         self.storage.save_account(account)
         return account
@@ -768,6 +771,359 @@ class MoneyService:
         if result is None:
             return None
         return Decimal(str(round(result, 6)))
+
+    # -----------------------------------------------------------------------
+    # UK Tax report
+    # -----------------------------------------------------------------------
+
+    def generate_uk_tax_report(
+        self,
+        tax_year_start: int,
+        account_ids: List[str],
+        joint_account_ids: Optional[List[str]] = None,
+    ) -> "UKTaxReport":
+        """Generate a UK tax report for the specified tax year and accounts.
+
+        The UK tax year runs from 6 April ``tax_year_start`` to
+        5 April ``tax_year_start + 1`` (inclusive).
+
+        Capital gains are computed using the Section 104 pool (average cost)
+        method.  ISA accounts (Cash ISA and Stocks & Shares ISA) are
+        flagged and excluded from taxable totals.
+
+        If ``joint_account_ids`` is provided, amounts for those accounts are
+        halved (50/50 split) to represent each co-owner's share.
+        """
+        from datetime import date as _Date
+        from .models import (
+            CapitalGainEvent,
+            InvestmentIncomeItem,
+            OtherIncomeItem,
+            SavingsInterestItem,
+            UKTaxReport,
+        )
+
+        year_start = _Date(tax_year_start, 4, 6)
+        year_end = _Date(tax_year_start + 1, 4, 5)
+
+        report = UKTaxReport(tax_year_start=tax_year_start)
+
+        _joint_ids: set = set(joint_account_ids) if joint_account_ids else set()
+
+        _isa_savings = {
+            SavingsAccountType.CASH_ISA,
+            SavingsAccountType.STOCKS_SHARES_ISA,
+        }
+
+        categories_dict = self.get_categories_dict()
+
+        for account_id in account_ids:
+            account = self.get_account(account_id)
+            if account is None:
+                continue
+
+            is_inv = account.account_type == AccountType.INVESTMENT
+            is_isa = account.savings_subtype in _isa_savings
+            share = Decimal("0.5") if account_id in _joint_ids else Decimal("1")
+
+            # ----------------------------------------------------------
+            # Investment accounts — CGT + investment income
+            # ----------------------------------------------------------
+            if is_inv:
+                # Use Section 104 pool (average cost) per security.
+                # We must process *all* transactions chronologically to
+                # build the correct pool before the tax year, then pick
+                # up disposals within the year.
+                all_inv_txns = self.storage.get_investment_transactions_for_account(account_id)
+                all_inv_txns = sorted(all_inv_txns, key=lambda t: (t.date, t.created_date))
+
+                # pool[security_id] = (total_shares, total_cost)
+                pool: Dict[str, Tuple[Decimal, Decimal]] = {}
+
+                for txn in all_inv_txns:
+                    sid = txn.security_id
+                    txn_type = txn.transaction_type
+
+                    # ---- update the pool regardless of year ----
+                    if txn_type in (
+                        InvestmentTransactionType.BUY,
+                        InvestmentTransactionType.ADD,
+                    ):
+                        if sid:
+                            sh, tc = pool.get(sid, (Decimal("0"), Decimal("0")))
+                            cost_added = txn.quantity * txn.price + txn.commission
+                            pool[sid] = (sh + txn.quantity, tc + cost_added)
+
+                    elif txn_type == InvestmentTransactionType.REINV_DIV:
+                        if sid:
+                            sh, tc = pool.get(sid, (Decimal("0"), Decimal("0")))
+                            cost_added = txn.quantity * txn.price
+                            pool[sid] = (sh + txn.quantity, tc + cost_added)
+
+                    elif txn_type == InvestmentTransactionType.SELL:
+                        if sid:
+                            sh, tc = pool.get(sid, (Decimal("0"), Decimal("0")))
+                            avg = tc / sh if sh else Decimal("0")
+                            sell_qty = min(txn.quantity, sh)
+                            cost_of_sale = avg * sell_qty
+                            pool[sid] = (
+                                sh - sell_qty,
+                                tc - cost_of_sale,
+                            )
+                            # Only record the disposal if it falls in this tax year
+                            if year_start <= txn.date <= year_end:
+                                proceeds = (txn.quantity * txn.price - txn.commission) * share
+                                cost_of_reported = cost_of_sale * share
+                                gain = proceeds - cost_of_reported
+                                security = self.get_security(sid)
+                                sec_name = security.name if security else sid
+                                report.capital_gains.append(
+                                    CapitalGainEvent(
+                                        date=txn.date,
+                                        account_name=account.name,
+                                        security_name=sec_name,
+                                        quantity=txn.quantity,
+                                        proceeds=proceeds,
+                                        cost=cost_of_reported,
+                                        gain=gain,
+                                        is_isa=is_isa,
+                                        share_pct=int(share * 100),
+                                    )
+                                )
+
+                    elif txn_type == InvestmentTransactionType.REMOVE:
+                        if sid:
+                            sh, tc = pool.get(sid, (Decimal("0"), Decimal("0")))
+                            avg = tc / sh if sh else Decimal("0")
+                            rm_qty = min(txn.quantity, sh)
+                            pool[sid] = (sh - rm_qty, tc - avg * rm_qty)
+
+                    # ---- investment income in tax year ----
+                    if not (year_start <= txn.date <= year_end):
+                        continue
+
+                    if txn_type in (
+                        InvestmentTransactionType.DIV,
+                        InvestmentTransactionType.REINV_DIV,
+                        InvestmentTransactionType.INT_INC,
+                        InvestmentTransactionType.MISC_INC,
+                    ):
+                        security = self.get_security(sid) if sid else None
+                        sec_name = security.name if security else ""
+                        income_amount = (
+                            abs(txn.amount)
+                            if txn.amount != Decimal("0")
+                            else (txn.quantity * txn.price)
+                        )
+                        if income_amount > Decimal("0"):
+                            report.investment_income.append(
+                                InvestmentIncomeItem(
+                                    date=txn.date,
+                                    account_name=account.name,
+                                    security_name=sec_name,
+                                    income_type=txn_type.value,
+                                    amount=income_amount * share,
+                                    is_isa=is_isa,
+                                    share_pct=int(share * 100),
+                                )
+                            )
+
+            # ----------------------------------------------------------
+            # Non-investment accounts — savings interest + other income
+            # ----------------------------------------------------------
+            else:
+                # Build a set of known account IDs once for transfer detection.
+                # (Lazy-initialised on first non-investment account.)
+                if "_all_account_ids" not in dir():
+                    _all_account_ids: set = {
+                        a.id for a in self.storage.get_all_accounts(include_closed=True)
+                    }
+
+                txns = self.storage.get_transactions_for_account(account_id)
+                for txn in txns:
+                    if not (year_start <= txn.date <= year_end):
+                        continue
+                    if txn.amount <= Decimal("0"):
+                        continue
+                    # Skip inter-account transfers.
+                    # A transaction is a transfer when:
+                    #   (a) the top-level transfer_account_id points to a known account, OR
+                    #   (b) any split's transfer_account_id points to a known account, OR
+                    #   (c) QIF-imported transfer: memo contains "[Transfer: ..." pattern, OR
+                    #   (d) payee is exactly "Transfer" (case-insensitive).
+                    if txn.transfer_account_id in _all_account_ids:
+                        continue
+                    if any(s.transfer_account_id in _all_account_ids for s in txn.splits):
+                        continue
+                    if "[Transfer:" in (txn.memo or ""):
+                        continue
+                    if (txn.payee or "").strip().lower().startswith("transfer"):
+                        continue
+
+                    category = (
+                        categories_dict.get(txn.category_id or "") if txn.category_id else None
+                    )
+
+                    # Categorise as savings interest when:
+                    #   - the category name contains "interest", OR
+                    #   - the payee name contains "interest", OR
+                    #   - the account is a Savings account and the transaction
+                    #     has no category (uncategorised credit).
+                    cat_name = category.name.lower() if category else ""
+                    payee_name = txn.payee.lower()
+                    is_interest = (
+                        "interest" in cat_name
+                        or "interest" in payee_name
+                        or (account.account_type == AccountType.SAVINGS and category is None)
+                    )
+
+                    if is_interest:
+                        report.savings_interest.append(
+                            SavingsInterestItem(
+                                date=txn.date,
+                                account_name=account.name,
+                                payee=txn.payee,
+                                amount=txn.amount * share,
+                                is_isa=is_isa,
+                                share_pct=int(share * 100),
+                            )
+                        )
+                    elif category is not None and category.is_income:
+                        report.other_income.append(
+                            OtherIncomeItem(
+                                date=txn.date,
+                                account_name=account.name,
+                                payee=txn.payee,
+                                category_name=category.full_name(categories_dict),
+                                amount=txn.amount * share,
+                                share_pct=int(share * 100),
+                            )
+                        )
+
+        # Sort each section chronologically
+        report.capital_gains.sort(key=lambda e: e.date)
+        report.investment_income.sort(key=lambda e: e.date)
+        report.savings_interest.sort(key=lambda e: e.date)
+        report.other_income.sort(key=lambda e: e.date)
+
+        return report
+
+    # -----------------------------------------------------------------------
+    # Account Summary report
+    # -----------------------------------------------------------------------
+
+    def generate_account_summary(
+        self,
+        start_date: Date,
+        end_date: Date,
+        account_ids: List[str],
+    ) -> "AccountSummaryReport":
+        """Generate an account summary report for a date range.
+
+        For each account the method computes:
+        - Opening balance: the account's balance just *before* ``start_date``
+          (opening_balance + sum of all transactions before start_date).
+        - Credits / debits / category breakdown for transactions whose date
+          falls in [start_date, end_date].
+        - Closing balance: opening_balance + net_change in period.
+
+        Investment accounts are included with their cash-equivalent balance
+        (the account's ``current_balance`` field, maintained by the storage
+        layer) so their cash position is visible alongside bank accounts.
+        """
+        from .models import (
+            AccountSummaryEntry,
+            AccountSummaryReport,
+            CategorySummaryRow,
+        )
+
+        report = AccountSummaryReport(start_date=start_date, end_date=end_date)
+        categories_dict = self.get_categories_dict()
+
+        for account_id in account_ids:
+            account = self.get_account(account_id)
+            if account is None:
+                continue
+
+            if account.account_type == AccountType.INVESTMENT:
+                # For investment accounts use investment transaction amounts
+                all_txns_inv = self.storage.get_investment_transactions_for_account(account_id)
+                pre_period_inv = sum(t.amount for t in all_txns_inv if t.date < start_date)
+                opening = account.opening_balance + pre_period_inv
+
+                in_period_inv = [t for t in all_txns_inv if start_date <= t.date <= end_date]
+                credits = sum(t.amount for t in in_period_inv if t.amount > Decimal("0"))
+                debits = sum(abs(t.amount) for t in in_period_inv if t.amount < Decimal("0"))
+
+                # Category breakdown: group by transaction type
+                cat_totals: Dict[str, Decimal] = {}
+                for t in in_period_inv:
+                    label = t.transaction_type.value
+                    cat_totals[label] = cat_totals.get(label, Decimal("0")) + t.amount
+
+                breakdown = [
+                    CategorySummaryRow(category_name=k, amount=v)
+                    for k, v in sorted(cat_totals.items())
+                    if v != Decimal("0")
+                ]
+
+                report.entries.append(
+                    AccountSummaryEntry(
+                        account_name=account.name,
+                        account_type=account.account_type.value,
+                        opening_balance=opening,
+                        closing_balance=opening + credits - debits,
+                        total_credits=credits,
+                        total_debits=debits,
+                        category_breakdown=breakdown,
+                        transaction_count=len(in_period_inv),
+                    )
+                )
+            else:
+                # Bank / savings / credit-card accounts
+                all_txns = self.storage.get_transactions_for_account(account_id)
+                pre_period = sum(t.amount for t in all_txns if t.date < start_date)
+                opening = account.opening_balance + pre_period
+
+                in_period = [t for t in all_txns if start_date <= t.date <= end_date]
+                credits = sum(t.amount for t in in_period if t.amount > Decimal("0"))
+                debits = sum(abs(t.amount) for t in in_period if t.amount < Decimal("0"))
+
+                # Category breakdown
+                cat_totals_b: Dict[str, Decimal] = {}
+                for t in in_period:
+                    if t.is_split():
+                        for split in t.splits:
+                            cat = categories_dict.get(split.category_id or "")
+                            label = cat.full_name(categories_dict) if cat else "Uncategorised"
+                            cat_totals_b[label] = (
+                                cat_totals_b.get(label, Decimal("0")) + split.amount
+                            )
+                    else:
+                        cat = categories_dict.get(t.category_id or "") if t.category_id else None
+                        label = cat.full_name(categories_dict) if cat else "Uncategorised"
+                        cat_totals_b[label] = cat_totals_b.get(label, Decimal("0")) + t.amount
+
+                breakdown_b = [
+                    CategorySummaryRow(category_name=k, amount=v)
+                    for k, v in sorted(cat_totals_b.items())
+                    if v != Decimal("0")
+                ]
+
+                report.entries.append(
+                    AccountSummaryEntry(
+                        account_name=account.name,
+                        account_type=account.account_type.value,
+                        opening_balance=opening,
+                        closing_balance=opening + credits - debits,
+                        total_credits=credits,
+                        total_debits=debits,
+                        category_breakdown=breakdown_b,
+                        transaction_count=len(in_period),
+                    )
+                )
+
+        return report
 
 
 # ---------------------------------------------------------------------------

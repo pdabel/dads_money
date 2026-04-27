@@ -58,7 +58,9 @@ class Storage:
                 account_number TEXT,
                 institution TEXT,
                 created_date TEXT NOT NULL,
-                closed INTEGER NOT NULL DEFAULT 0
+                closed INTEGER NOT NULL DEFAULT 0,
+                hidden INTEGER NOT NULL DEFAULT 0,
+                owner TEXT NOT NULL DEFAULT ''
             )
         """
         )
@@ -212,6 +214,10 @@ class Storage:
             cursor.execute("ALTER TABLE accounts ADD COLUMN hidden INTEGER NOT NULL DEFAULT 0")
             self.conn.commit()
 
+        if "owner" not in columns:
+            cursor.execute("ALTER TABLE accounts ADD COLUMN owner TEXT NOT NULL DEFAULT ''")
+            self.conn.commit()
+
         # Ensure investment tables exist (safe for existing databases)
         cursor.execute(
             """
@@ -325,8 +331,8 @@ class Storage:
             """
             INSERT OR REPLACE INTO accounts
             (id, name, account_type, savings_subtype, opening_balance, current_balance, description,
-             account_number, institution, created_date, closed, hidden)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+             account_number, institution, created_date, closed, hidden, owner)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
             (
                 account.id,
@@ -341,6 +347,7 @@ class Storage:
                 account.created_date.isoformat(),
                 int(account.closed),
                 int(account.hidden),
+                account.owner,
             ),
         )
         self.conn.commit()
@@ -404,6 +411,7 @@ class Storage:
             created_date=date.fromisoformat(row["created_date"]),
             closed=bool(row["closed"]),
             hidden=bool(row["hidden"]) if "hidden" in row.keys() else False,
+            owner=row["owner"] if "owner" in row.keys() else "",
         )
 
     # Category operations

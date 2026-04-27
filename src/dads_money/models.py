@@ -104,6 +104,7 @@ class Account:
     created_date: Date = field(default_factory=Date.today)
     closed: bool = False
     hidden: bool = False
+    owner: str = ""  # Free text, e.g. "Alice", "Bob", "Joint". Empty = unassigned.
 
     def __post_init__(self) -> None:
         """Ensure balance is Decimal."""
@@ -256,3 +257,194 @@ class PortfolioSummary:
     total_value: Optional[Decimal] = None
     unrealized_gain_loss: Optional[Decimal] = None
     roi_xirr: Optional[Decimal] = None  # annualised rate, e.g. Decimal("0.0823") = 8.23%
+
+
+# ---------------------------------------------------------------------------
+# UK Tax report models
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CapitalGainEvent:
+    """A single disposal event for UK Capital Gains Tax purposes."""
+
+    date: Date
+    account_name: str
+    security_name: str
+    quantity: Decimal
+    proceeds: Decimal  # quantity × sale price − commission (already scaled by share)
+    cost: Decimal  # average cost of shares disposed (already scaled by share)
+    gain: Decimal  # proceeds − cost (may be negative = loss)
+    is_isa: bool = False  # ISA disposals are CGT-exempt
+    share_pct: int = 100  # 100 for sole-owner, 50 for joint (50/50 split)
+
+
+@dataclass
+class InvestmentIncomeItem:
+    """A single dividend, interest or misc-income item from an investment account."""
+
+    date: Date
+    account_name: str
+    security_name: str  # empty for pure-cash items (INT_INC with no security)
+    income_type: str  # e.g. "Dividend", "Reinvested Dividend", "Interest Income"
+    amount: Decimal
+    is_isa: bool = False  # ISA income is tax-free
+    share_pct: int = 100  # 100 for sole-owner, 50 for joint (50/50 split)
+
+
+@dataclass
+class SavingsInterestItem:
+    """Interest received in a bank/savings account transaction."""
+
+    date: Date
+    account_name: str
+    payee: str
+    amount: Decimal
+    is_isa: bool = False  # Cash ISA interest is tax-free
+    share_pct: int = 100  # 100 for sole-owner, 50 for joint (50/50 split)
+
+
+@dataclass
+class OtherIncomeItem:
+    """A taxable income transaction from a non-investment account."""
+
+    date: Date
+    account_name: str
+    payee: str
+    category_name: str
+    amount: Decimal
+    share_pct: int = 100  # 100 for sole-owner, 50 for joint (50/50 split)
+
+
+@dataclass
+class UKTaxReport:
+    """Aggregated UK tax report for one tax year.
+
+    The UK tax year runs from 6 April to 5 April the following year.
+    ``tax_year_start`` is e.g. 2024 for the 2024/25 tax year.
+    """
+
+    tax_year_start: int
+    capital_gains: List[CapitalGainEvent] = field(default_factory=list)
+    investment_income: List[InvestmentIncomeItem] = field(default_factory=list)
+    savings_interest: List[SavingsInterestItem] = field(default_factory=list)
+    other_income: List[OtherIncomeItem] = field(default_factory=list)
+
+    # ------------------------------------------------------------------
+    # Convenience totals
+    # ------------------------------------------------------------------
+
+    @property
+    def tax_year_label(self) -> str:
+        return f"{self.tax_year_start}/{str(self.tax_year_start + 1)[-2:]}"
+
+    @property
+    def total_gains(self) -> Decimal:
+        return sum(
+            (e.gain for e in self.capital_gains if not e.is_isa and e.gain > 0),
+            Decimal("0"),
+        )
+
+    @property
+    def total_losses(self) -> Decimal:
+        return sum(
+            (abs(e.gain) for e in self.capital_gains if not e.is_isa and e.gain < 0),
+            Decimal("0"),
+        )
+
+    @property
+    def net_capital_gain(self) -> Decimal:
+        return self.total_gains - self.total_losses
+
+    @property
+    def total_dividends(self) -> Decimal:
+        return sum(
+            (
+                i.amount
+                for i in self.investment_income
+                if not i.is_isa and i.income_type in ("Dividend", "Reinvested Dividend")
+            ),
+            Decimal("0"),
+        )
+
+    @property
+    def total_investment_interest(self) -> Decimal:
+        return sum(
+            (
+                i.amount
+                for i in self.investment_income
+                if not i.is_isa and i.income_type not in ("Dividend", "Reinvested Dividend")
+            ),
+            Decimal("0"),
+        )
+
+    @property
+    def total_savings_interest(self) -> Decimal:
+        return sum(
+            (i.amount for i in self.savings_interest if not i.is_isa),
+            Decimal("0"),
+        )
+
+    @property
+    def total_interest(self) -> Decimal:
+        return self.total_investment_interest + self.total_savings_interest
+
+    @property
+    def total_other_income(self) -> Decimal:
+        return sum((i.amount for i in self.other_income), Decimal("0"))
+
+
+# ---------------------------------------------------------------------------
+# Account Summary report models
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class CategorySummaryRow:
+    """A single category line in an account summary report."""
+
+    category_name: str
+    amount: Decimal  # positive = income/credit, negative = expense/debit
+
+
+@dataclass
+class AccountSummaryEntry:
+    """Summary figures for a single account over a date range."""
+
+    account_name: str
+    account_type: str
+    opening_balance: Decimal
+    closing_balance: Decimal
+    total_credits: Decimal  # sum of positive transactions in period
+    total_debits: Decimal  # sum of absolute values of negative transactions in period
+    category_breakdown: List[CategorySummaryRow]
+    transaction_count: int
+
+    @property
+    def net_change(self) -> Decimal:
+        return self.total_credits - self.total_debits
+
+
+@dataclass
+class AccountSummaryReport:
+    """Aggregated account summary over a date range or tax year."""
+
+    start_date: Date
+    end_date: Date
+    entries: List[AccountSummaryEntry] = field(default_factory=list)
+
+    @property
+    def period_label(self) -> str:
+        return f"{self.start_date.strftime('%d %b %Y')} – {self.end_date.strftime('%d %b %Y')}"
+
+    @property
+    def total_credits(self) -> Decimal:
+        return sum((e.total_credits for e in self.entries), Decimal("0"))
+
+    @property
+    def total_debits(self) -> Decimal:
+        return sum((e.total_debits for e in self.entries), Decimal("0"))
+
+    @property
+    def net_change(self) -> Decimal:
+        return self.total_credits - self.total_debits

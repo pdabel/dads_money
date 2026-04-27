@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Optional
 
-from PySide6.QtCore import QDate
+from PySide6.QtCore import QDate, QLocale
 from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
@@ -73,10 +73,18 @@ class AccountDialog(QDialog):
         self.balance_spin.setRange(-1000000, 1000000)
         settings = get_settings()
         self.balance_spin.setDecimals(settings.decimal_places)
+        self.balance_spin.setLocale(QLocale.c())
         self.balance_spin.setPrefix(settings.currency_symbol + " ")
         if self.account:
             self.balance_spin.setValue(float(self.account.opening_balance))
         layout.addRow("Opening Balance:", self.balance_spin)
+
+        # Owner
+        self.owner_edit = QLineEdit()
+        self.owner_edit.setPlaceholderText("e.g. Alice, Bob, Joint (optional)")
+        if self.account:
+            self.owner_edit.setText(self.account.owner)
+        layout.addRow("Owner:", self.owner_edit)
 
         # Buttons
         buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)  # type: ignore[attr-defined]
@@ -106,6 +114,7 @@ class AccountDialog(QDialog):
             "type": self.type_combo.currentData(),
             "savings_subtype": savings_subtype,
             "opening_balance": Decimal(str(self.balance_spin.value())),
+            "owner": self.owner_edit.text().strip(),
         }
 
 
@@ -189,6 +198,7 @@ class TransactionDialog(QDialog):
         self.amount_spin.setRange(0.01, 1000000)
         settings = get_settings()
         self.amount_spin.setDecimals(settings.decimal_places)
+        self.amount_spin.setLocale(QLocale.c())
         self.amount_spin.setPrefix(settings.currency_symbol + " ")
         if self.transaction:
             self.amount_spin.setValue(abs(float(self.transaction.amount)))

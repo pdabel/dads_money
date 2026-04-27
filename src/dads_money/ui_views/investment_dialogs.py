@@ -4,7 +4,7 @@ from datetime import date
 from decimal import Decimal
 from typing import Any, Dict, List, Optional
 
-from PySide6.QtCore import Qt, QDate, QTime, QThread, Signal
+from PySide6.QtCore import Qt, QDate, QLocale, QTime, QThread, Signal
 from PySide6.QtWidgets import (
     QComboBox,
     QDateEdit,
@@ -111,7 +111,7 @@ class InvestmentTransactionDialog(QDialog):
         self.qty_spin = QDoubleSpinBox()
         self.qty_spin.setDecimals(4)
         self.qty_spin.setRange(0, 1_000_000_000)
-        self.qty_spin.setGroupSeparatorShown(True)
+        self.qty_spin.setLocale(QLocale.c())
         layout.addRow(self.qty_label, self.qty_spin)
 
         # Price per share
@@ -119,7 +119,7 @@ class InvestmentTransactionDialog(QDialog):
         self.price_spin = QDoubleSpinBox()
         self.price_spin.setDecimals(settings.decimal_places)
         self.price_spin.setRange(0, 1_000_000_000)
-        self.price_spin.setGroupSeparatorShown(True)
+        self.price_spin.setLocale(QLocale.c())
         self.price_spin.setPrefix(settings.currency_symbol + " ")
         layout.addRow(self.price_label, self.price_spin)
 
@@ -128,6 +128,7 @@ class InvestmentTransactionDialog(QDialog):
         self.commission_spin = QDoubleSpinBox()
         self.commission_spin.setDecimals(settings.decimal_places)
         self.commission_spin.setRange(0, 1_000_000)
+        self.commission_spin.setLocale(QLocale.c())
         self.commission_spin.setPrefix(settings.currency_symbol + " ")
         layout.addRow(self.commission_label, self.commission_spin)
 
@@ -136,6 +137,7 @@ class InvestmentTransactionDialog(QDialog):
         self.amount_spin = QDoubleSpinBox()
         self.amount_spin.setDecimals(settings.decimal_places)
         self.amount_spin.setRange(0, 1_000_000_000)
+        self.amount_spin.setLocale(QLocale.c())
         self.amount_spin.setPrefix(settings.currency_symbol + " ")
         layout.addRow(self.amount_label, self.amount_spin)
 
@@ -423,6 +425,7 @@ class UpdatePriceDialog(QDialog):
         self.price_spin = QDoubleSpinBox()
         self.price_spin.setDecimals(6)
         self.price_spin.setRange(0, 1_000_000_000)
+        self.price_spin.setLocale(QLocale.c())
         self.price_spin.setPrefix(settings.currency_symbol + " ")
         layout.addRow("Price:", self.price_spin)
 
@@ -469,6 +472,7 @@ class CashReconcileDialog(QDialog):
         self.statement_spin = QDoubleSpinBox()
         self.statement_spin.setDecimals(self._settings.decimal_places)
         self.statement_spin.setRange(-1_000_000_000, 1_000_000_000)
+        self.statement_spin.setLocale(QLocale.c())
         self.statement_spin.setPrefix(self._settings.currency_symbol + " ")
         self.statement_spin.setValue(float(self._current))
         layout.addRow("Statement balance:", self.statement_spin)

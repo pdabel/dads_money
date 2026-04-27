@@ -3,11 +3,12 @@
 from pathlib import Path
 from typing import Any, Optional
 
-from PySide6.QtCore import Qt
+from PySide6.QtCore import QDate, Qt
 from PySide6.QtGui import QAction, QColor, QFont
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QDateEdit,
     QDialog,
     QDialogButtonBox,
     QFileDialog,
@@ -15,6 +16,7 @@ from PySide6.QtWidgets import (
     QHeaderView,
     QHBoxLayout,
     QLabel,
+    QLineEdit,
     QListWidget,
     QListWidgetItem,
     QMainWindow,
@@ -36,7 +38,9 @@ from ..settings import get_settings
 from .account_dialogs import AccountDialog, TransactionDialog
 from .investment_panel import InvestmentPanel
 from .manage_dialogs import CategoryDialog, PayeeDialog
+from .account_summary_dialog import AccountSummaryDialog
 from .settings_dialog import SettingsDialog
+from .tax_report_dialog import TaxReportDialog
 
 
 class MainWindow(QMainWindow):
@@ -161,6 +165,16 @@ class MainWindow(QMainWindow):
         columns_action.triggered.connect(self.choose_register_columns)
         view_menu.addAction(columns_action)
 
+        # Reports menu
+        reports_menu = menubar.addMenu("&Reports")
+        tax_report_action = QAction("UK &Tax Report...", self)
+        tax_report_action.triggered.connect(self.show_tax_report)
+        reports_menu.addAction(tax_report_action)
+
+        summary_action = QAction("Account &Summary...", self)
+        summary_action.triggered.connect(self.show_account_summary)
+        reports_menu.addAction(summary_action)
+
         # Help menu
         help_menu = menubar.addMenu("&Help")
         about_action = QAction("&About", self)
@@ -268,6 +282,41 @@ class MainWindow(QMainWindow):
         # Balance display
         self.balance_label = QLabel("")
         layout.addWidget(self.balance_label)
+
+        # Search / filter bar
+        filter_layout = QHBoxLayout()
+        filter_layout.addWidget(QLabel("Search:"))
+        self.search_edit = QLineEdit()
+        self.search_edit.setPlaceholderText("Filter by payee, memo, or amount…")
+        self.search_edit.setClearButtonEnabled(True)
+        self.search_edit.textChanged.connect(lambda _: self._filter_transactions())
+        filter_layout.addWidget(self.search_edit)
+
+        self.date_from_check = QCheckBox("From:")
+        self.date_from_edit = QDateEdit(QDate.currentDate().addYears(-1))
+        self.date_from_edit.setCalendarPopup(True)
+        self.date_from_edit.setEnabled(False)
+        self.date_from_check.stateChanged.connect(
+            lambda state: self.date_from_edit.setEnabled(bool(state))
+        )
+        self.date_from_check.stateChanged.connect(lambda _: self._filter_transactions())
+        self.date_from_edit.dateChanged.connect(lambda _: self._filter_transactions())
+        filter_layout.addWidget(self.date_from_check)
+        filter_layout.addWidget(self.date_from_edit)
+
+        self.date_to_check = QCheckBox("To:")
+        self.date_to_edit = QDateEdit(QDate.currentDate())
+        self.date_to_edit.setCalendarPopup(True)
+        self.date_to_edit.setEnabled(False)
+        self.date_to_check.stateChanged.connect(
+            lambda state: self.date_to_edit.setEnabled(bool(state))
+        )
+        self.date_to_check.stateChanged.connect(lambda _: self._filter_transactions())
+        self.date_to_edit.dateChanged.connect(lambda _: self._filter_transactions())
+        filter_layout.addWidget(self.date_to_check)
+        filter_layout.addWidget(self.date_to_edit)
+        filter_layout.addStretch()
+        layout.addLayout(filter_layout)
 
         # Transaction table
         self.transaction_table = QTableWidget()
@@ -560,6 +609,9 @@ class MainWindow(QMainWindow):
                     self.right_stack.removeWidget(old)
                     old.deleteLater()
             self.right_stack.setCurrentIndex(0)
+            self.search_edit.clear()
+            self.date_from_check.setChecked(False)
+            self.date_to_check.setChecked(False)
             self.load_transactions()
 
     def load_transactions(self) -> None:
@@ -595,6 +647,9 @@ class MainWindow(QMainWindow):
         opening_balance_item = QTableWidgetItem(self.settings.format_currency(running_balance))
         opening_balance_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)  # type: ignore[attr-defined]
         self.transaction_table.setItem(0, 6, opening_balance_item)
+        opening_row_item = self.transaction_table.item(0, 0)
+        if opening_row_item:
+            opening_row_item.setData(Qt.UserRole + 1, self.current_account.created_date)  # type: ignore[attr-defined]
 
         for i, trans in enumerate(transactions, start=1):
             date_formatted = trans.date.strftime(self.settings.date_format)
@@ -634,10 +689,51 @@ class MainWindow(QMainWindow):
             balance_item.setTextAlignment(Qt.AlignRight | Qt.AlignVCenter)  # type: ignore[attr-defined]
             self.transaction_table.setItem(i, 6, balance_item)
 
-            # Store transaction ID in first column for reference
+            # Store transaction ID and date in first column for reference
             item = self.transaction_table.item(i, 0)
             if item:
                 item.setData(Qt.UserRole, trans.id)  # type: ignore[attr-defined]
+                item.setData(Qt.UserRole + 1, trans.date)  # type: ignore[attr-defined]
+
+        # Re-apply search filter if active
+        self._filter_transactions()
+
+    def _filter_transactions(self) -> None:
+        """Show only rows matching the text search and/or date range."""
+        needle = self.search_edit.text().strip().lower()
+        # Strip commas so "1234" matches "£1,234.56"
+        needle_norm = needle.replace(",", "")
+        use_from = self.date_from_check.isChecked()
+        use_to = self.date_to_check.isChecked()
+        from_qdate = self.date_from_edit.date() if use_from else None
+        to_qdate = self.date_to_edit.date() if use_to else None
+
+        for row in range(self.transaction_table.rowCount()):
+            # Date range check
+            date_ok = True
+            if use_from or use_to:
+                date_cell = self.transaction_table.item(row, 0)
+                row_date = date_cell.data(Qt.UserRole + 1) if date_cell else None  # type: ignore[attr-defined]
+                if row_date is not None:
+                    row_qdate = QDate(row_date.year, row_date.month, row_date.day)
+                    if use_from and from_qdate is not None and row_qdate < from_qdate:
+                        date_ok = False
+                    if use_to and to_qdate is not None and row_qdate > to_qdate:
+                        date_ok = False
+
+            # Text search check
+            text_ok = True
+            if needle:
+                text_ok = False
+                for col in range(self.transaction_table.columnCount()):
+                    cell = self.transaction_table.item(row, col)
+                    if cell:
+                        cell_norm = cell.text().lower().replace(",", "")
+                        if needle_norm in cell_norm:
+                            text_ok = True
+                            break
+
+            self.transaction_table.setRowHidden(row, not (date_ok and text_ok))
 
     def new_account(self) -> None:
         """Create a new account."""
@@ -649,6 +745,7 @@ class MainWindow(QMainWindow):
                 account_type=account_data["type"],
                 savings_subtype=account_data.get("savings_subtype"),
                 opening_balance=account_data["opening_balance"],
+                owner=account_data.get("owner", ""),
             )
             self.load_accounts(account.id)
             self.statusBar().showMessage(f"Account '{account_data['name']}' created")
@@ -666,6 +763,7 @@ class MainWindow(QMainWindow):
             self.current_account.account_type = account_data["type"]
             self.current_account.savings_subtype = account_data.get("savings_subtype")
             self.current_account.opening_balance = account_data["opening_balance"]
+            self.current_account.owner = account_data.get("owner", "")
             self.service.update_account(self.current_account)
             self.load_accounts(self.current_account.id)
             self.statusBar().showMessage(f"Account '{account_data['name']}' updated")
@@ -888,6 +986,16 @@ class MainWindow(QMainWindow):
             self.settings.save()
             # Refresh display with new currency
             self.load_accounts(self.current_account.id if self.current_account else None)
+
+    def show_tax_report(self) -> None:
+        """Show the UK tax report dialog."""
+        dialog = TaxReportDialog(self, self.service, self.settings)
+        dialog.exec()
+
+    def show_account_summary(self) -> None:
+        """Show the account summary report dialog."""
+        dialog = AccountSummaryDialog(self, self.service, self.settings)
+        dialog.exec()
 
     def show_about(self) -> None:
         """Show about dialog."""
