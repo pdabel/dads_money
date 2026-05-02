@@ -489,3 +489,135 @@ class TestImportDeduplication:
             assert len(txns) == 2
         finally:
             service.close()
+
+
+class TestTransferTransactions:
+    """Tests for transfer transactions between accounts."""
+
+    def test_create_transfer_creates_both_sides(self, temp_db: Path) -> None:
+        """Transfer creates a debit on source and credit on destination."""
+        service = MoneyService(temp_db)
+        try:
+            src = service.create_account("Current", AccountType.CHECKING, opening_balance=1000.0)
+            dst = service.create_account("House Equity", AccountType.LIABILITY)
+
+            src_txn, dst_txn = service.create_transfer(
+                from_account_id=src.id,
+                to_account_id=dst.id,
+                transfer_date=date(2024, 1, 15),
+                amount=500.0,
+                payee="Monthly payment",
+                memo="Jan rent",
+            )
+
+            assert src_txn.amount == Decimal("-500.0")
+            assert dst_txn.amount == Decimal("500.0")
+            assert src_txn.account_id == src.id
+            assert dst_txn.account_id == dst.id
+        finally:
+            service.close()
+
+    def test_create_transfer_links_accounts(self, temp_db: Path) -> None:
+        """Both transfer transactions carry the counterpart account ID."""
+        service = MoneyService(temp_db)
+        try:
+            src = service.create_account("Current", AccountType.CHECKING)
+            dst = service.create_account("House Equity", AccountType.LIABILITY)
+
+            src_txn, dst_txn = service.create_transfer(
+                from_account_id=src.id,
+                to_account_id=dst.id,
+                transfer_date=date(2024, 2, 1),
+                amount=300.0,
+            )
+
+            assert src_txn.transfer_account_id == dst.id
+            assert dst_txn.transfer_account_id == src.id
+        finally:
+            service.close()
+
+    def test_create_transfer_updates_balances(self, temp_db: Path) -> None:
+        """Transfer correctly updates running balances of both accounts."""
+        service = MoneyService(temp_db)
+        try:
+            src = service.create_account("Current", AccountType.CHECKING, opening_balance=2000.0)
+            dst = service.create_account("House Equity", AccountType.LIABILITY, opening_balance=0.0)
+
+            service.create_transfer(
+                from_account_id=src.id,
+                to_account_id=dst.id,
+                transfer_date=date(2024, 3, 1),
+                amount=400.0,
+            )
+
+            src_updated = service.get_account(src.id)
+            dst_updated = service.get_account(dst.id)
+            assert src_updated.current_balance == Decimal("1600.0")
+            assert dst_updated.current_balance == Decimal("400.0")
+        finally:
+            service.close()
+
+    def test_create_transfer_persists_both_transactions(self, temp_db: Path) -> None:
+        """Both sides of a transfer are retrievable from storage."""
+        service = MoneyService(temp_db)
+        try:
+            src = service.create_account("Current", AccountType.CHECKING)
+            dst = service.create_account("House Equity", AccountType.LIABILITY)
+
+            src_txn, dst_txn = service.create_transfer(
+                from_account_id=src.id,
+                to_account_id=dst.id,
+                transfer_date=date(2024, 4, 1),
+                amount=200.0,
+                payee="April payment",
+            )
+
+            src_txns = service.get_transactions_for_account(src.id)
+            dst_txns = service.get_transactions_for_account(dst.id)
+
+            assert any(t.id == src_txn.id for t in src_txns)
+            assert any(t.id == dst_txn.id for t in dst_txns)
+        finally:
+            service.close()
+
+    def test_delete_transfer_removes_both_sides(self, temp_db: Path) -> None:
+        """Deleting one side of a transfer removes both transactions."""
+        service = MoneyService(temp_db)
+        try:
+            src = service.create_account("Current", AccountType.CHECKING)
+            dst = service.create_account("House Equity", AccountType.LIABILITY)
+
+            src_txn, dst_txn = service.create_transfer(
+                from_account_id=src.id,
+                to_account_id=dst.id,
+                transfer_date=date(2024, 5, 1),
+                amount=150.0,
+            )
+
+            service.delete_transfer(src_txn.id, src.id)
+
+            assert service.get_transaction(src_txn.id) is None
+            assert service.get_transaction(dst_txn.id) is None
+        finally:
+            service.close()
+
+    def test_find_linked_transfer_transaction(self, temp_db: Path) -> None:
+        """find_linked_transfer returns the counterpart transaction."""
+        service = MoneyService(temp_db)
+        try:
+            src = service.create_account("Current", AccountType.CHECKING)
+            dst = service.create_account("House Equity", AccountType.LIABILITY)
+
+            src_txn, dst_txn = service.create_transfer(
+                from_account_id=src.id,
+                to_account_id=dst.id,
+                transfer_date=date(2024, 6, 1),
+                amount=250.0,
+                payee="June payment",
+            )
+
+            linked = service.find_linked_transfer_transaction(src_txn)
+            assert linked is not None
+            assert linked.id == dst_txn.id
+        finally:
+            service.close()

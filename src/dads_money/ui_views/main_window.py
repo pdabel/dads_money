@@ -804,17 +804,29 @@ class MainWindow(QMainWindow):
         dialog = TransactionDialog(self, self.service, self.current_account)
         if dialog.exec() == QDialog.Accepted:  # type: ignore[attr-defined]
             trans_data = dialog.get_data()
-            trans = Transaction(
-                account_id=self.current_account.id,
-                date=trans_data["date"],
-                payee=trans_data["payee"],
-                memo=trans_data["memo"],
-                amount=trans_data["amount"],
-                status=trans_data["status"],
-            )
-            self.service.update_transaction(trans)
-            self.load_accounts(self.current_account.id)  # Refresh balance and keep selection
-            self.statusBar().showMessage("Transaction created")
+            if trans_data.get("type") == "transfer":
+                self.service.create_transfer(
+                    from_account_id=self.current_account.id,
+                    to_account_id=trans_data["transfer_account_id"],
+                    transfer_date=trans_data["date"],
+                    amount=float(trans_data["amount"]),
+                    memo=trans_data.get("memo", ""),
+                    status=trans_data["status"],
+                )
+                self.load_accounts(self.current_account.id)
+                self.statusBar().showMessage("Transfer created")
+            else:
+                trans = Transaction(
+                    account_id=self.current_account.id,
+                    date=trans_data["date"],
+                    payee=trans_data["payee"],
+                    memo=trans_data["memo"],
+                    amount=trans_data["amount"],
+                    status=trans_data["status"],
+                )
+                self.service.update_transaction(trans)
+                self.load_accounts(self.current_account.id)
+                self.statusBar().showMessage("Transaction created")
 
     def edit_transaction(self) -> None:
         """Edit the selected transaction."""
@@ -835,12 +847,24 @@ class MainWindow(QMainWindow):
             dialog = TransactionDialog(self, self.service, self.current_account, transaction)
             if dialog.exec() == QDialog.Accepted:  # type: ignore[attr-defined]
                 trans_data = dialog.get_data()
-                transaction.date = trans_data["date"]
-                transaction.payee = trans_data["payee"]
-                transaction.memo = trans_data["memo"]
-                transaction.amount = trans_data["amount"]
-                transaction.status = trans_data["status"]
-                self.service.update_transaction(transaction)
+                if trans_data.get("type") == "transfer":
+                    # Delete old transfer pair and recreate with updated values
+                    self.service.delete_transfer(transaction.id, self.current_account.id)
+                    self.service.create_transfer(
+                        from_account_id=self.current_account.id,
+                        to_account_id=trans_data["transfer_account_id"],
+                        transfer_date=trans_data["date"],
+                        amount=float(trans_data["amount"]),
+                        memo=trans_data.get("memo", ""),
+                        status=trans_data["status"],
+                    )
+                else:
+                    transaction.date = trans_data["date"]
+                    transaction.payee = trans_data["payee"]
+                    transaction.memo = trans_data["memo"]
+                    transaction.amount = trans_data["amount"]
+                    transaction.status = trans_data["status"]
+                    self.service.update_transaction(transaction)
                 self.load_accounts(self.current_account.id)
                 self.statusBar().showMessage("Transaction updated")
 
@@ -864,15 +888,25 @@ class MainWindow(QMainWindow):
         dialog.setWindowTitle("Duplicate Transaction")
         if dialog.exec() == QDialog.Accepted:  # type: ignore[attr-defined]
             trans_data = dialog.get_data()
-            new_trans = Transaction(
-                account_id=self.current_account.id,
-                date=trans_data["date"],
-                payee=trans_data["payee"],
-                memo=trans_data["memo"],
-                amount=trans_data["amount"],
-                status=trans_data["status"],
-            )
-            self.service.update_transaction(new_trans)
+            if trans_data.get("type") == "transfer":
+                self.service.create_transfer(
+                    from_account_id=self.current_account.id,
+                    to_account_id=trans_data["transfer_account_id"],
+                    transfer_date=trans_data["date"],
+                    amount=float(trans_data["amount"]),
+                    memo=trans_data.get("memo", ""),
+                    status=trans_data["status"],
+                )
+            else:
+                new_trans = Transaction(
+                    account_id=self.current_account.id,
+                    date=trans_data["date"],
+                    payee=trans_data["payee"],
+                    memo=trans_data["memo"],
+                    amount=trans_data["amount"],
+                    status=trans_data["status"],
+                )
+                self.service.update_transaction(new_trans)
             self.load_accounts(self.current_account.id)
             self.statusBar().showMessage("Transaction duplicated")
 
@@ -897,7 +931,11 @@ class MainWindow(QMainWindow):
             if self.current_account is None:
                 return
             trans_id = item.data(Qt.UserRole)  # type: ignore[attr-defined]
-            self.service.delete_transaction(trans_id, self.current_account.id)
+            transaction = self.service.get_transaction(trans_id)
+            if transaction and transaction.transfer_account_id:
+                self.service.delete_transfer(trans_id, self.current_account.id)
+            else:
+                self.service.delete_transaction(trans_id, self.current_account.id)
             self.load_accounts(self.current_account.id)
             self.statusBar().showMessage("Transaction deleted")
 

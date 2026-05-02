@@ -182,6 +182,94 @@ class MoneyService:
         """Delete a transaction."""
         self.storage.delete_transaction(transaction_id, account_id)
 
+    # Transfer operations
+
+    def create_transfer(
+        self,
+        from_account_id: str,
+        to_account_id: str,
+        transfer_date: Date,
+        amount: float,
+        payee: str = "Transfer",
+        memo: str = "",
+        status: TransactionStatus = TransactionStatus.UNCLEARED,
+    ) -> Tuple[Transaction, Transaction]:
+        """Create a linked pair of transfer transactions between two accounts.
+
+        Args:
+            from_account_id: Account to debit (money leaves).
+            to_account_id: Account to credit (money arrives).
+            transfer_date: Date of the transfer.
+            amount: Positive value; source gets -amount, destination gets +amount.
+            payee: Payee label shown on both sides.
+            memo: Optional memo copied to both sides.
+            status: Cleared/reconciled status for both transactions.
+
+        Returns:
+            Tuple of (source_transaction, destination_transaction).
+        """
+        decimal_amount = Decimal(str(amount))
+
+        src_txn = Transaction(
+            account_id=from_account_id,
+            date=transfer_date,
+            amount=-decimal_amount,
+            payee=payee,
+            memo=memo,
+            status=status,
+            transfer_account_id=to_account_id,
+        )
+        self.storage.save_transaction(src_txn)
+
+        dst_txn = Transaction(
+            account_id=to_account_id,
+            date=transfer_date,
+            amount=decimal_amount,
+            payee=payee,
+            memo=memo,
+            status=status,
+            transfer_account_id=from_account_id,
+        )
+        self.storage.save_transaction(dst_txn)
+
+        return src_txn, dst_txn
+
+    def find_linked_transfer_transaction(self, transaction: Transaction) -> Optional[Transaction]:
+        """Return the counterpart transaction for a transfer, or None if not found.
+
+        Args:
+            transaction: One side of a transfer (must have transfer_account_id set).
+
+        Returns:
+            The matching transaction in the linked account, or None.
+        """
+        if not transaction.transfer_account_id:
+            return None
+        candidates = self.storage.get_transactions_for_account(transaction.transfer_account_id)
+        for candidate in candidates:
+            if (
+                candidate.transfer_account_id == transaction.account_id
+                and candidate.date == transaction.date
+                and candidate.amount == -transaction.amount
+                and candidate.payee == transaction.payee
+            ):
+                return candidate
+        return None
+
+    def delete_transfer(self, transaction_id: str, account_id: str) -> None:
+        """Delete both sides of a transfer transaction.
+
+        Args:
+            transaction_id: ID of either side of the transfer to delete.
+            account_id: Account the given transaction belongs to.
+        """
+        transaction = self.storage.get_transaction(transaction_id)
+        if transaction and transaction.transfer_account_id:
+            linked = self.find_linked_transfer_transaction(transaction)
+            if linked:
+                self.storage.delete_transaction(linked.id, transaction.transfer_account_id)
+        self.storage.delete_transaction(transaction_id, account_id)
+
     # Import/Export operations
     def import_qif(self, file_path: str, account_id: str) -> int:
         """Import transactions from QIF file.

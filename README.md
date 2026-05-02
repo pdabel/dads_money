@@ -64,6 +64,7 @@ dads-money
   - Status (Uncleared, Cleared, Reconciled)
   - Memo
 - Add, edit, and delete transactions
+- **Transfer between accounts**: Move money between any two non-investment accounts (e.g. current account → house equity liability); both sides are created, linked, and deleted together
 - Automatic balance calculation
 - Transaction history sorted by date
 

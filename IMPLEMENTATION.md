@@ -114,7 +114,7 @@ python demo.py
 - `src/dads_money/settings.py` - User preferences (currency, date format)
 - `src/dads_money/ui_views/__init__.py` - Re-exports MainWindow
 - `src/dads_money/ui_views/main_window.py` - Main application window
-- `src/dads_money/ui_views/account_dialogs.py` - AccountDialog, TransactionDialog
+- `src/dads_money/ui_views/account_dialogs.py` - AccountDialog, TransactionDialog (with Transfer type)
 - `src/dads_money/ui_views/manage_dialogs.py` - CategoryDialog, PayeeDialog
 - `src/dads_money/ui_views/settings_dialog.py` - SettingsDialog
 - `src/dads_money/ui_views/investment_panel.py` - InvestmentPanel
@@ -267,7 +267,7 @@ The core application is complete and functional. Optional future additions:
 4. **Budgets**: Budget creation and tracking
 5. **Reconciliation Wizard**: Guided account reconciliation
 6. **Search & Filter**: Transaction search functionality
-7. **Transfers**: Enhanced transfer tracking between accounts
+7. ✅ **Transfers**: Transfer transactions between accounts — both sides created, linked, and deleted atomically via `MoneyService.create_transfer` / `delete_transfer`
 8. **Scheduled Transactions**: Recurring transaction support
 9. **Attachments**: Receipt/document attachments
 10. **Multi-currency**: Foreign currency support

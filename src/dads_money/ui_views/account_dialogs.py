@@ -2,7 +2,7 @@
 
 from datetime import date
 from decimal import Decimal
-from typing import Any, Optional
+from typing import Any, List, Optional
 
 from PySide6.QtCore import QDate, QLocale
 from PySide6.QtWidgets import (
@@ -141,6 +141,7 @@ class TransactionDialog(QDialog):
         self.setMinimumWidth(400)
 
         layout = QFormLayout()
+        self._layout = layout
 
         # Date
         self.date_edit = QDateEdit()
@@ -162,6 +163,7 @@ class TransactionDialog(QDialog):
         self.type_combo = QComboBox()
         self.type_combo.addItem("Deposit", "deposit")
         self.type_combo.addItem("Payment", "payment")
+        self.type_combo.addItem("Transfer", "transfer")
 
         # Add savings-specific transaction types
         if self.account.account_type == AccountType.SAVINGS:
@@ -169,7 +171,9 @@ class TransactionDialog(QDialog):
             if self.account.savings_subtype == SavingsAccountType.STOCKS_SHARES_ISA:
                 self.type_combo.addItem("Dividend", "dividend")
 
-        if self.transaction and self.transaction.amount >= 0:
+        if self.transaction and self.transaction.transfer_account_id:
+            self.type_combo.setCurrentIndex(self.type_combo.findData("transfer"))
+        elif self.transaction and self.transaction.amount >= 0:
             self.type_combo.setCurrentIndex(0)
         else:
             self.type_combo.setCurrentIndex(1)
@@ -179,7 +183,24 @@ class TransactionDialog(QDialog):
 
         layout.addRow("Type:", self.type_combo)
 
+        # Transfer destination — shown only when type == "transfer"
+        self._transfer_accounts: List[Account] = [
+            a
+            for a in self.service.get_all_accounts()
+            if a.id != self.account.id and a.account_type != AccountType.INVESTMENT
+        ]
+        self._transfer_label = QLabel("Transfer to:")
+        self.transfer_combo = QComboBox()
+        for acct in self._transfer_accounts:
+            self.transfer_combo.addItem(acct.name, acct.id)
+        if self.transaction and self.transaction.transfer_account_id:
+            idx = self.transfer_combo.findData(self.transaction.transfer_account_id)
+            if idx >= 0:
+                self.transfer_combo.setCurrentIndex(idx)
+        layout.addRow(self._transfer_label, self.transfer_combo)
+
         # Payee - editable combo box with predefined and historical payees
+        self._payee_label = QLabel("Payee:")
         self.payee_combo = QComboBox()
         self.payee_combo.setEditable(True)
         self.payee_combo.setInsertPolicy(QComboBox.NoInsert)  # type: ignore[attr-defined]
@@ -191,7 +212,7 @@ class TransactionDialog(QDialog):
         if self.transaction:
             self.payee_combo.setEditText(self.transaction.payee)
 
-        layout.addRow("Payee:", self.payee_combo)
+        layout.addRow(self._payee_label, self.payee_combo)
 
         # Amount
         self.amount_spin = QDoubleSpinBox()
@@ -230,21 +251,28 @@ class TransactionDialog(QDialog):
 
         self.setLayout(layout)
 
+        # Apply initial visibility based on current type
+        self._update_transfer_visibility()
+
+    def _update_transfer_visibility(self) -> None:
+        """Show/hide transfer-specific and payee rows depending on transaction type."""
+        is_transfer = self.type_combo.currentData() == "transfer"
+        self._transfer_label.setVisible(is_transfer)
+        self.transfer_combo.setVisible(is_transfer)
+        self._payee_label.setVisible(not is_transfer)
+        self.payee_combo.setVisible(not is_transfer)
+
     def _on_transaction_type_changed(self) -> None:
         """Handle transaction type change to auto-populate fields."""
         trans_type = self.type_combo.currentData()
+        self._update_transfer_visibility()
 
         # Auto-populate payee for interest and dividend types
         if trans_type == "interest":
             self.payee_combo.setEditText("Interest Payment")
         elif trans_type == "dividend":
             self.payee_combo.setEditText("Dividend Payment")
-        elif trans_type == "deposit":
-            # Clear auto-populated values for manual entry
-            if self.payee_combo.currentText() in ["Interest Payment", "Dividend Payment"]:
-                self.payee_combo.clearEditText()
-        elif trans_type == "payment":
-            # Clear auto-populated values for manual entry
+        elif trans_type in ("deposit", "payment"):
             if self.payee_combo.currentText() in ["Interest Payment", "Dividend Payment"]:
                 self.payee_combo.clearEditText()
 
@@ -254,11 +282,23 @@ class TransactionDialog(QDialog):
         amount = Decimal(str(self.amount_spin.value()))
         trans_type = self.type_combo.currentData()
 
+        if trans_type == "transfer":
+            transfer_account_id = self.transfer_combo.currentData()
+            return {
+                "type": "transfer",
+                "date": date(qdate.year(), qdate.month(), qdate.day()),
+                "transfer_account_id": transfer_account_id,
+                "amount": amount,
+                "status": self.status_combo.currentData(),
+                "memo": self.memo_edit.text(),
+            }
+
         # Payment types are negative, all others are positive
         if trans_type == "payment":
             amount = -amount
 
         return {
+            "type": trans_type,
             "date": date(qdate.year(), qdate.month(), qdate.day()),
             "payee": self.payee_combo.currentText(),
             "amount": amount,
