@@ -1,5 +1,6 @@
 """Integration tests for CSV import/export round-trip."""
 
+import csv
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -7,8 +8,13 @@ from tempfile import NamedTemporaryFile
 
 import pytest
 
-from dads_money.io_csv import CSVParser, CSVWriter
-from dads_money.models import Transaction, TransactionStatus
+from dads_money.io_csv import CSVParser, CSVWriter, InvestmentCSVWriter
+from dads_money.models import (
+    InvestmentTransaction,
+    InvestmentTransactionType,
+    Transaction,
+    TransactionStatus,
+)
 
 
 class TestCSVRoundTrip:
@@ -255,5 +261,98 @@ class TestCSVRoundTrip:
             parsed = CSVParser.parse_file(str(temp_file))
 
             assert len(parsed) >= 100
+        finally:
+            temp_file.unlink(missing_ok=True)
+
+
+class TestInvestmentCSVWriter:
+    """Tests for InvestmentCSVWriter — regression for export producing headers only."""
+
+    def test_investment_csv_writes_data_rows(self) -> None:
+        """InvestmentCSVWriter must write one row per transaction, not just headers."""
+        transactions = [
+            InvestmentTransaction(
+                account_id="acc-1",
+                security_id="sec-1",
+                date=date(2024, 6, 1),
+                transaction_type=InvestmentTransactionType.BUY,
+                quantity=Decimal("10"),
+                price=Decimal("150.00"),
+                commission=Decimal("9.99"),
+                amount=Decimal("-1509.99"),
+                memo="Buy AAPL",
+            ),
+            InvestmentTransaction(
+                account_id="acc-1",
+                security_id="sec-2",
+                date=date(2024, 6, 5),
+                transaction_type=InvestmentTransactionType.SELL,
+                quantity=Decimal("5"),
+                price=Decimal("200.00"),
+                commission=Decimal("9.99"),
+                amount=Decimal("990.01"),
+                memo="Sell MSFT",
+            ),
+        ]
+        security_names = {"sec-1": "AAPL", "sec-2": "MSFT"}
+
+        with NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+            temp_file = Path(f.name)
+
+        try:
+            InvestmentCSVWriter.write_file(str(temp_file), transactions, security_names)
+
+            with open(str(temp_file), newline="") as f:
+                rows = list(csv.DictReader(f))
+
+            assert len(rows) == 2, f"Expected 2 data rows, got {len(rows)}"
+            assert rows[0]["Security"] == "AAPL"
+            assert rows[0]["Action"] == InvestmentTransactionType.BUY.value
+            assert Decimal(rows[0]["Amount"]) == Decimal("-1509.99")
+            assert rows[1]["Security"] == "MSFT"
+            assert rows[1]["Action"] == InvestmentTransactionType.SELL.value
+        finally:
+            temp_file.unlink(missing_ok=True)
+
+    def test_investment_csv_empty_list_writes_only_headers(self) -> None:
+        """An empty transaction list should produce just the header row."""
+        with NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+            temp_file = Path(f.name)
+
+        try:
+            InvestmentCSVWriter.write_file(str(temp_file), [], {})
+
+            with open(str(temp_file), newline="") as f:
+                rows = list(csv.DictReader(f))
+
+            assert len(rows) == 0
+        finally:
+            temp_file.unlink(missing_ok=True)
+
+    def test_investment_csv_no_security_id(self) -> None:
+        """Transactions without a security_id (e.g. cash deposits) export cleanly."""
+        transactions = [
+            InvestmentTransaction(
+                account_id="acc-1",
+                security_id=None,
+                date=date(2024, 7, 1),
+                transaction_type=InvestmentTransactionType.MISC_INC,
+                amount=Decimal("500.00"),
+                memo="Cash deposit",
+            ),
+        ]
+
+        with NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+            temp_file = Path(f.name)
+
+        try:
+            InvestmentCSVWriter.write_file(str(temp_file), transactions)
+
+            with open(str(temp_file), newline="") as f:
+                rows = list(csv.DictReader(f))
+
+            assert len(rows) == 1
+            assert rows[0]["Security"] == ""
+            assert rows[0]["Memo"] == "Cash deposit"
         finally:
             temp_file.unlink(missing_ok=True)

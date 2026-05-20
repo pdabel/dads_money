@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 from .config import Config
-from .io_csv import CSVParser, CSVWriter, InvestmentCSVParser
+from .io_csv import CSVParser, CSVWriter, InvestmentCSVParser, InvestmentCSVWriter
 from .io_ofx import OFXImporter
 from .io_qif import InvestmentQIFParser, QIFParser, QIFWriter
 from .models import (
@@ -341,9 +341,20 @@ class MoneyService:
         return count
 
     def export_csv(self, file_path: str, account_id: str) -> None:
-        """Export account transactions to CSV file."""
-        transactions = self.get_transactions_for_account(account_id)
-        CSVWriter.write_file(file_path, transactions)
+        """Export account transactions to CSV file.
+
+        Investment accounts are written with investment-specific columns
+        (Action, Security, Quantity, Price, Commission); all other account
+        types use the standard transaction columns.
+        """
+        account = self.get_account(account_id)
+        if account and account.account_type == AccountType.INVESTMENT:
+            inv_transactions = self.get_investment_transactions_for_account(account_id)
+            securities = {s.id: s.name for s in self.storage.get_all_securities()}
+            InvestmentCSVWriter.write_file(file_path, inv_transactions, securities)
+        else:
+            transactions = self.get_transactions_for_account(account_id)
+            CSVWriter.write_file(file_path, transactions)
 
     def import_ofx(self, file_path: str, account_id: str) -> int:
         """Import transactions from OFX file."""

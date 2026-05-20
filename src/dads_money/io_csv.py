@@ -3,10 +3,10 @@
 import csv
 from datetime import datetime, date
 from decimal import Decimal
-from typing import List, TextIO
+from typing import Dict, List, Optional, TextIO
 
 from .io_qif import InvestmentImportRecord, _map_qif_action
-from .models import Transaction, TransactionStatus
+from .models import InvestmentTransaction, Transaction, TransactionStatus
 
 
 class CSVParser:
@@ -151,6 +151,77 @@ class CSVWriter:
                         trans.status.value if trans.status != TransactionStatus.UNCLEARED else ""
                     ),
                     "Check Number": trans.check_number,
+                }
+            )
+
+
+class InvestmentCSVWriter:
+    """Write investment transactions to CSV format."""
+
+    @staticmethod
+    def write_file(
+        file_path: str,
+        transactions: List[InvestmentTransaction],
+        security_names: Optional[Dict[str, str]] = None,
+    ) -> None:
+        """Write investment transactions to a CSV file.
+
+        Args:
+            file_path: Destination file path.
+            transactions: List of InvestmentTransaction objects.
+            security_names: Optional mapping of security_id → name for readable output.
+        """
+        with open(file_path, "w", encoding="utf-8", newline="") as f:
+            InvestmentCSVWriter.write(f, transactions, security_names)
+
+    @staticmethod
+    def write(
+        file: TextIO,
+        transactions: List[InvestmentTransaction],
+        security_names: Optional[Dict[str, str]] = None,
+    ) -> None:
+        """Write investment transactions to CSV format.
+
+        Args:
+            file: Writable text file object.
+            transactions: List of InvestmentTransaction objects.
+            security_names: Optional mapping of security_id → name.
+        """
+        if security_names is None:
+            security_names = {}
+
+        fieldnames = [
+            "Date",
+            "Action",
+            "Security",
+            "Quantity",
+            "Price",
+            "Commission",
+            "Amount",
+            "Memo",
+            "Status",
+        ]
+        writer = csv.DictWriter(file, fieldnames=fieldnames)
+        writer.writeheader()
+
+        for txn in transactions:
+            security_name = ""
+            if txn.security_id:
+                security_name = security_names.get(txn.security_id, txn.security_id)
+
+            writer.writerow(
+                {
+                    "Date": txn.date.strftime("%Y-%m-%d"),
+                    "Action": txn.transaction_type.value,
+                    "Security": security_name,
+                    "Quantity": str(txn.quantity) if txn.quantity else "",
+                    "Price": str(txn.price) if txn.price else "",
+                    "Commission": str(txn.commission) if txn.commission else "",
+                    "Amount": str(txn.amount),
+                    "Memo": txn.memo,
+                    "Status": (
+                        txn.status.value if txn.status != TransactionStatus.UNCLEARED else ""
+                    ),
                 }
             )
 
