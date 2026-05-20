@@ -296,14 +296,16 @@ class MoneyService:
             count += 1
         return count
 
-    def export_qif(self, file_path: str, account_id: str) -> None:
-        """Export account transactions to QIF file."""
+    def export_qif(self, file_path: str, account_id: str) -> int:
+        """Export account transactions to QIF file.
+
+        Returns the number of transactions written.
+        """
         transactions = self.get_transactions_for_account(account_id)
         account = self.get_account(account_id)
         if not account:
             raise ValueError(f"Account {account_id} not found")
 
-        # Determine QIF account type
         account_type_map = {
             "Current Account": "Bank",
             "Checking": "Bank",
@@ -312,8 +314,8 @@ class MoneyService:
             "Cash": "Cash",
         }
         qif_type = account_type_map.get(account.account_type.value, "Bank")
-
         QIFWriter.write_file(file_path, transactions, qif_type)
+        return len(transactions)
 
     def import_csv(self, file_path: str, account_id: str) -> int:
         """Import transactions from CSV file.
@@ -340,21 +342,25 @@ class MoneyService:
             count += 1
         return count
 
-    def export_csv(self, file_path: str, account_id: str) -> None:
+    def export_csv(self, file_path: str, account_id: str) -> int:
         """Export account transactions to CSV file.
 
         Investment accounts are written with investment-specific columns
         (Action, Security, Quantity, Price, Commission); all other account
         types use the standard transaction columns.
+
+        Returns the number of transactions written.
         """
         account = self.get_account(account_id)
         if account and account.account_type == AccountType.INVESTMENT:
             inv_transactions = self.get_investment_transactions_for_account(account_id)
             securities = {s.id: s.name for s in self.storage.get_all_securities()}
             InvestmentCSVWriter.write_file(file_path, inv_transactions, securities)
+            return len(inv_transactions)
         else:
             transactions = self.get_transactions_for_account(account_id)
             CSVWriter.write_file(file_path, transactions)
+            return len(transactions)
 
     def import_ofx(self, file_path: str, account_id: str) -> int:
         """Import transactions from OFX file."""

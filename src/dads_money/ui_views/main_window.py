@@ -984,26 +984,40 @@ class MainWindow(QMainWindow):
         file_path, filter_type = QFileDialog.getSaveFileName(
             self,
             "Export Transactions",
-            str(Path.home() / f"{self.current_account.name}.qif"),
-            "QIF Files (*.qif);;CSV Files (*.csv);;All Files (*.*)",
+            str(Path.home() / f"{self.current_account.name}.csv"),
+            "CSV Files (*.csv);;QIF Files (*.qif);;All Files (*.*)",
         )
 
         if not file_path:
             return
 
         try:
-            if file_path.endswith(".qif"):
-                self.service.export_qif(file_path, self.current_account.id)
-            elif file_path.endswith(".csv"):
-                self.service.export_csv(file_path, self.current_account.id)
+            # Determine format: prefer file extension, fall back to selected filter
+            use_csv = file_path.endswith(".csv") or (
+                not file_path.endswith(".qif") and "CSV" in filter_type
+            )
+            use_qif = file_path.endswith(".qif") or (
+                not file_path.endswith(".csv") and "QIF" in filter_type
+            )
+
+            if use_csv:
+                if not file_path.endswith(".csv"):
+                    file_path += ".csv"
+                count = self.service.export_csv(file_path, self.current_account.id)
+            elif use_qif:
+                if not file_path.endswith(".qif"):
+                    file_path += ".qif"
+                count = self.service.export_qif(file_path, self.current_account.id)
             else:
                 QMessageBox.warning(self, "Unknown Format", "Please use .qif or .csv extension.")
                 return
 
             QMessageBox.information(
-                self, "Export Complete", f"Transactions exported to {file_path}"
+                self,
+                "Export Complete",
+                f"Exported {count} transaction(s) to {file_path}",
             )
-            self.statusBar().showMessage("Export complete")
+            self.statusBar().showMessage(f"Export complete — {count} transaction(s)")
         except Exception as e:
             QMessageBox.critical(self, "Export Error", f"Error exporting file:\n{str(e)}")
 
