@@ -117,7 +117,7 @@ class InvestmentTransactionDialog(QDialog):
         # Price per share
         self.price_label = QLabel("Price per Share:")
         self.price_spin = QDoubleSpinBox()
-        self.price_spin.setDecimals(settings.decimal_places)
+        self.price_spin.setDecimals(5)
         self.price_spin.setRange(0, 1_000_000_000)
         self.price_spin.setLocale(QLocale.c())
         self.price_spin.setPrefix(settings.currency_symbol + " ")
