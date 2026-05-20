@@ -286,7 +286,8 @@ class MoneyService:
             records = InvestmentQIFParser.parse_file(file_path)
             return self._save_investment_import_records(records, account_id)
 
-        transactions = QIFParser.parse_file(file_path)
+        account_name_to_id = {a.name: a.id for a in self.storage.get_all_accounts()}
+        transactions = QIFParser.parse_file(file_path, account_name_to_id)
         count = 0
         for trans in transactions:
             trans.account_id = account_id
@@ -314,7 +315,8 @@ class MoneyService:
             "Cash": "Cash",
         }
         qif_type = account_type_map.get(account.account_type.value, "Bank")
-        QIFWriter.write_file(file_path, transactions, qif_type)
+        account_id_to_name = {a.id: a.name for a in self.storage.get_all_accounts()}
+        QIFWriter.write_file(file_path, transactions, qif_type, account_id_to_name)
         return len(transactions)
 
     def import_csv(self, file_path: str, account_id: str) -> int:

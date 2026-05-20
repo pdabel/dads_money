@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime, date
 from decimal import Decimal
 from io import StringIO
-from typing import List, Optional, TextIO
+from typing import Dict, List, Optional, TextIO
 
 from .models import (
     InvestmentTransactionType,
@@ -92,14 +92,32 @@ class QIFParser:
     """Parse QIF format files."""
 
     @staticmethod
-    def parse_file(file_path: str) -> List[Transaction]:
-        """Parse QIF file and return list of transactions."""
+    def parse_file(
+        file_path: str, account_name_to_id: Optional[Dict[str, str]] = None
+    ) -> List[Transaction]:
+        """Parse QIF file and return list of transactions.
+
+        Args:
+            file_path: Path to the QIF file.
+            account_name_to_id: Optional mapping of account name → account ID.
+                When provided, ``L[AccountName]`` fields are resolved to
+                ``transfer_account_id`` instead of being appended to the memo.
+        """
         with open(file_path, "r", encoding="utf-8") as f:
-            return QIFParser.parse(f)
+            return QIFParser.parse(f, account_name_to_id)
 
     @staticmethod
-    def parse(file: TextIO) -> List[Transaction]:
-        """Parse QIF format from file object."""
+    def parse(
+        file: TextIO, account_name_to_id: Optional[Dict[str, str]] = None
+    ) -> List[Transaction]:
+        """Parse QIF format from file object.
+
+        Args:
+            file: Readable text stream.
+            account_name_to_id: Optional mapping of account name → account ID.
+                When provided, ``L[AccountName]`` fields are resolved to
+                ``transfer_account_id`` instead of being appended to the memo.
+        """
         transactions = []
         current_transaction = None
 
@@ -109,11 +127,9 @@ class QIFParser:
                 continue
 
             if line == "!Type:Bank" or line == "!Type:Cash" or line == "!Type:CCard":
-                # Account type header - just continue
                 continue
 
             if line == "^":
-                # End of transaction
                 if current_transaction:
                     transactions.append(current_transaction)
                     current_transaction = None
@@ -133,7 +149,6 @@ class QIFParser:
             elif field_type == "T":  # Amount
                 if current_transaction is None:
                     current_transaction = Transaction()
-                # Remove commas and parse as decimal
                 amount_str = field_value.replace(",", "")
                 current_transaction.amount = Decimal(amount_str)
 
@@ -165,11 +180,12 @@ class QIFParser:
             elif field_type == "L":  # Category or transfer
                 if current_transaction is None:
                     current_transaction = Transaction()
-                # Transfer accounts are enclosed in brackets: [Account Name]
                 if field_value.startswith("[") and field_value.endswith("]"):
-                    # This is a transfer - we'll handle this later when we have account mapping
-                    current_transaction.memo += f" [Transfer: {field_value[1:-1]}]"
-                # else it's a category - we'll need to map this later
+                    account_name = field_value[1:-1]
+                    if account_name_to_id:
+                        resolved_id = account_name_to_id.get(account_name)
+                        if resolved_id:
+                            current_transaction.transfer_account_id = resolved_id
 
         # Don't forget last transaction if file doesn't end with ^
         if current_transaction:
@@ -197,15 +213,39 @@ class QIFWriter:
 
     @staticmethod
     def write_file(
-        file_path: str, transactions: List[Transaction], account_type: str = "Bank"
+        file_path: str,
+        transactions: List[Transaction],
+        account_type: str = "Bank",
+        account_id_to_name: Optional[Dict[str, str]] = None,
     ) -> None:
-        """Write transactions to QIF file."""
+        """Write transactions to QIF file.
+
+        Args:
+            file_path: Destination file path.
+            transactions: Transactions to write.
+            account_type: QIF account type header (Bank, CCard, Cash, etc.).
+            account_id_to_name: Optional mapping of account ID → account name used
+                to emit ``L[AccountName]`` fields for transfer transactions.
+        """
         with open(file_path, "w", encoding="utf-8") as f:
-            QIFWriter.write(f, transactions, account_type)
+            QIFWriter.write(f, transactions, account_type, account_id_to_name)
 
     @staticmethod
-    def write(file: TextIO, transactions: List[Transaction], account_type: str = "Bank") -> None:
-        """Write transactions to QIF format."""
+    def write(
+        file: TextIO,
+        transactions: List[Transaction],
+        account_type: str = "Bank",
+        account_id_to_name: Optional[Dict[str, str]] = None,
+    ) -> None:
+        """Write transactions to QIF format.
+
+        Args:
+            file: Writable text stream.
+            transactions: Transactions to write.
+            account_type: QIF account type header (Bank, CCard, Cash, etc.).
+            account_id_to_name: Optional mapping of account ID → account name used
+                to emit ``L[AccountName]`` fields for transfer transactions.
+        """
         file.write(f"!Type:{account_type}\n")
 
         for trans in transactions:
@@ -235,8 +275,11 @@ class QIFWriter:
             else:
                 file.write("C\n")
 
-            # Category (simplified - would need category name lookup)
-            # For now, skip category in export
+            # Transfer account link
+            if trans.transfer_account_id and account_id_to_name:
+                linked_name = account_id_to_name.get(trans.transfer_account_id)
+                if linked_name:
+                    file.write(f"L[{linked_name}]\n")
 
             # End of transaction
             file.write("^\n")

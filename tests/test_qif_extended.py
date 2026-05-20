@@ -1,5 +1,6 @@
 """Extended QIF format tests for edge cases and error handling."""
 
+import io
 from datetime import date
 from decimal import Decimal
 from pathlib import Path
@@ -8,7 +9,7 @@ from tempfile import NamedTemporaryFile
 import pytest
 
 from dads_money.io_qif import QIFParser, QIFWriter
-from dads_money.models import Transaction
+from dads_money.models import AccountType, Transaction, TransactionStatus
 
 
 class TestQIFEdgeCases:
@@ -321,3 +322,137 @@ M{long_memo}
             assert "Grocery" in payees or "Salary" in payees
         finally:
             temp_file.unlink(missing_ok=True)
+
+
+class TestQIFTransferRoundTrip:
+    """Tests for QIF transfer account link preservation."""
+
+    def test_writer_emits_transfer_account_field(self) -> None:
+        """Writer outputs L[AccountName] when transfer_account_id is set and mapping provided."""
+        txn = Transaction(
+            date=date(2024, 1, 15),
+            amount=Decimal("-500.00"),
+            payee="Monthly payment",
+            transfer_account_id="acc-liability-123",
+        )
+        buf = io.StringIO()
+        QIFWriter.write(buf, [txn], account_id_to_name={"acc-liability-123": "House Equity"})
+        output = buf.getvalue()
+        assert "L[House Equity]" in output
+
+    def test_writer_omits_transfer_field_without_mapping(self) -> None:
+        """Writer silently skips L field when no account mapping is provided."""
+        txn = Transaction(
+            date=date(2024, 1, 15),
+            amount=Decimal("-500.00"),
+            transfer_account_id="acc-liability-123",
+        )
+        buf = io.StringIO()
+        QIFWriter.write(buf, [txn])
+        output = buf.getvalue()
+        assert "L[" not in output
+
+    def test_writer_omits_transfer_field_for_unknown_id(self) -> None:
+        """Writer skips L field when transfer_account_id is not in the mapping."""
+        txn = Transaction(
+            date=date(2024, 1, 15),
+            amount=Decimal("-500.00"),
+            transfer_account_id="acc-unknown",
+        )
+        buf = io.StringIO()
+        QIFWriter.write(buf, [txn], account_id_to_name={"acc-other": "Other Account"})
+        output = buf.getvalue()
+        assert "L[" not in output
+
+    def test_parser_resolves_transfer_account_name_to_id(self) -> None:
+        """Parser sets transfer_account_id when L[AccountName] matches the provided mapping."""
+        qif = "!Type:Bank\nD01/15/2024\nT-500.00\nPMonthly payment\nL[House Equity]\n^\n"
+        transactions = QIFParser.parse(
+            io.StringIO(qif),
+            account_name_to_id={"House Equity": "acc-liability-123"},
+        )
+        assert len(transactions) == 1
+        assert transactions[0].transfer_account_id == "acc-liability-123"
+
+    def test_parser_leaves_transfer_account_id_none_without_mapping(self) -> None:
+        """Parser does not crash when L[AccountName] is present but no mapping given."""
+        qif = "!Type:Bank\nD01/15/2024\nT-500.00\nL[House Equity]\n^\n"
+        transactions = QIFParser.parse(io.StringIO(qif))
+        assert len(transactions) == 1
+        assert transactions[0].transfer_account_id is None
+
+    def test_parser_leaves_transfer_account_id_none_for_unknown_name(self) -> None:
+        """Parser leaves transfer_account_id as None when name not in mapping."""
+        qif = "!Type:Bank\nD01/15/2024\nT-500.00\nL[Unknown Account]\n^\n"
+        transactions = QIFParser.parse(
+            io.StringIO(qif),
+            account_name_to_id={"House Equity": "acc-liability-123"},
+        )
+        assert len(transactions) == 1
+        assert transactions[0].transfer_account_id is None
+
+    def test_full_round_trip_preserves_transfer_link(self, tmp_path: Path) -> None:
+        """Export a transfer transaction then re-import it: transfer_account_id is restored."""
+        txn = Transaction(
+            date=date(2024, 3, 1),
+            amount=Decimal("-400.00"),
+            payee="House payment",
+            memo="March",
+            status=TransactionStatus.CLEARED,
+            transfer_account_id="acc-liability-456",
+        )
+        account_id_to_name = {"acc-liability-456": "House Equity"}
+        account_name_to_id = {"House Equity": "acc-liability-456"}
+
+        qif_file = tmp_path / "transfer.qif"
+        QIFWriter.write_file(str(qif_file), [txn], account_id_to_name=account_id_to_name)
+        parsed = QIFParser.parse_file(str(qif_file), account_name_to_id=account_name_to_id)
+
+        assert len(parsed) == 1
+        assert parsed[0].transfer_account_id == "acc-liability-456"
+        assert parsed[0].amount == Decimal("-400.00")
+        assert parsed[0].payee == "House payment"
+
+    def test_service_export_import_round_trip_preserves_transfer(
+        self, temp_db: Path, tmp_path: Path
+    ) -> None:
+        """Service-level QIF export then import on a fresh DB restores transfer links."""
+        from dads_money.services import MoneyService
+
+        # ── source DB ──────────────────────────────────────────────────────────
+        src = MoneyService(temp_db)
+        try:
+            current = src.create_account("Current", AccountType.CHECKING, opening_balance=2000.0)
+            equity = src.create_account("House Equity", AccountType.LIABILITY)
+            src.create_transfer(
+                from_account_id=current.id,
+                to_account_id=equity.id,
+                transfer_date=date(2024, 4, 1),
+                amount=500.0,
+                payee="April payment",
+            )
+
+            current_qif = tmp_path / "current.qif"
+            equity_qif = tmp_path / "equity.qif"
+            src.export_qif(str(current_qif), current.id)
+            src.export_qif(str(equity_qif), equity.id)
+        finally:
+            src.close()
+
+        # ── destination DB ─────────────────────────────────────────────────────
+        dest_db = tmp_path / "dest.db"
+        dest = MoneyService(dest_db)
+        try:
+            dest_current = dest.create_account("Current", AccountType.CHECKING)
+            dest_equity = dest.create_account("House Equity", AccountType.LIABILITY)
+
+            # Liability first so the name exists when current is imported
+            dest.import_qif(str(equity_qif), dest_equity.id)
+            dest.import_qif(str(current_qif), dest_current.id)
+
+            current_txns = dest.get_transactions_for_account(dest_current.id)
+            transfer_txns = [t for t in current_txns if t.transfer_account_id]
+            assert len(transfer_txns) == 1
+            assert transfer_txns[0].transfer_account_id == dest_equity.id
+        finally:
+            dest.close()
