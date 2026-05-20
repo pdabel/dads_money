@@ -146,7 +146,7 @@ class TransactionDialog(QDialog):
         # Date
         self.date_edit = QDateEdit()
         self.date_edit.setCalendarPopup(True)
-        self.date_edit.setDisplayFormat("MM/dd/yyyy")
+        self.date_edit.setDisplayFormat(get_settings().qt_date_format)
         if self.transaction:
             self.date_edit.setDate(
                 QDate(

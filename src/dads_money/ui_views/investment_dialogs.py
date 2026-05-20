@@ -90,6 +90,7 @@ class InvestmentTransactionDialog(QDialog):
         # Date
         self.date_edit = QDateEdit(QDate.currentDate())
         self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat(settings.qt_date_format)
         layout.addRow("Date:", self.date_edit)
 
         # Transaction type
@@ -420,6 +421,7 @@ class UpdatePriceDialog(QDialog):
 
         self.date_edit = QDateEdit(QDate.currentDate())
         self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat(settings.qt_date_format)
         layout.addRow("Date:", self.date_edit)
 
         self.price_spin = QDoubleSpinBox()
@@ -467,6 +469,7 @@ class CashReconcileDialog(QDialog):
 
         self.date_edit = QDateEdit(QDate.currentDate())
         self.date_edit.setCalendarPopup(True)
+        self.date_edit.setDisplayFormat(self._settings.qt_date_format)
         layout.addRow("Statement date:", self.date_edit)
 
         self.statement_spin = QDoubleSpinBox()

@@ -145,6 +145,15 @@ class Settings:
         """Set the date format string."""
         self._settings["date_format"] = fmt
 
+    @property
+    def qt_date_format(self) -> str:
+        """Return the date format string in Qt QDateEdit notation.
+
+        Converts Python strftime codes to Qt format tokens so that
+        QDateEdit.setDisplayFormat() respects the user's locale preference.
+        """
+        return self.date_format.replace("%d", "dd").replace("%m", "MM").replace("%Y", "yyyy")
+
 
 # Global settings instance
 _settings_instance: Optional[Settings] = None
