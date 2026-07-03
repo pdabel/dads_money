@@ -11,6 +11,7 @@ from .models import (
     InvestmentTransaction,
     Transaction,
     TransactionStatus,
+    UKTaxReport,
 )
 
 
@@ -334,6 +335,176 @@ class AccountSummaryCSVWriter:
             for cat, amount in expenses:
                 writer.writerow([cat, f"{amount:.2f}"])
             writer.writerow(["Total Expenses", f"{sum(v for _, v in expenses):.2f}"])
+        else:
+            writer.writerow(["(none)"])
+
+
+def _format_quantity(quantity: Decimal) -> str:
+    """Format a share quantity as a plain number without trailing zeros."""
+    text = f"{quantity:f}"
+    if "." in text:
+        text = text.rstrip("0").rstrip(".")
+    return text
+
+
+class UKTaxReportCSVWriter:
+    """Write a UKTaxReport as an Excel-friendly CSV file.
+
+    Amounts are written as plain numbers (no pound signs or thousands
+    separators), dates use ISO YYYY-MM-DD format, joint shares are plain
+    percentages, ISA-exempt rows carry an explicit Yes flag, and files are
+    encoded as UTF-8 with a BOM so Excel decodes non-ASCII names correctly.
+    """
+
+    @staticmethod
+    def write_file(file_path: str, report: UKTaxReport) -> None:
+        """Write a UK tax report to a CSV file.
+
+        Args:
+            file_path: Destination file path.
+            report: The report to export.
+        """
+        with open(file_path, "w", encoding="utf-8-sig", newline="") as f:
+            UKTaxReportCSVWriter.write(f, report)
+
+    @staticmethod
+    def write(file: TextIO, report: UKTaxReport) -> None:
+        """Write a UK tax report to CSV format.
+
+        Args:
+            file: Writable text file object.
+            report: The report to export.
+        """
+        writer = csv.writer(file)
+
+        writer.writerow(["UK Tax Report"])
+        writer.writerow(["Tax Year", report.tax_year_label])
+        writer.writerow(["Generated", date.today().isoformat()])
+        writer.writerow([])
+
+        writer.writerow(["Summary"])
+        writer.writerow(["Net Capital Gain / (Loss)", f"{report.net_capital_gain:.2f}"])
+        writer.writerow(["Total Dividends (excl. ISA)", f"{report.total_dividends:.2f}"])
+        writer.writerow(["Total Interest (excl. ISA)", f"{report.total_interest:.2f}"])
+        writer.writerow(["Total Other Income", f"{report.total_other_income:.2f}"])
+        writer.writerow([])
+
+        # Capital gains
+        writer.writerow(["Capital Gains"])
+        writer.writerow(
+            [
+                "Date",
+                "Account",
+                "Security",
+                "Quantity",
+                "Proceeds",
+                "Cost",
+                "Gain/(Loss)",
+                "Share %",
+                "ISA Exempt",
+            ]
+        )
+        if report.capital_gains:
+            for e in report.capital_gains:
+                writer.writerow(
+                    [
+                        e.date.isoformat(),
+                        e.account_name,
+                        e.security_name,
+                        _format_quantity(e.quantity),
+                        f"{e.proceeds:.2f}",
+                        f"{e.cost:.2f}",
+                        f"{e.gain:.2f}",
+                        str(e.share_pct),
+                        "Yes" if e.is_isa else "",
+                    ]
+                )
+            writer.writerow(["Total Gains (excl. ISA)", f"{report.total_gains:.2f}"])
+            writer.writerow(["Total Losses (excl. ISA)", f"{report.total_losses:.2f}"])
+            writer.writerow(["Net Capital Gain", f"{report.net_capital_gain:.2f}"])
+        else:
+            writer.writerow(["(none)"])
+        writer.writerow([])
+
+        # Dividends
+        dividends = [
+            i
+            for i in report.investment_income
+            if i.income_type in ("Dividend", "Reinvested Dividend")
+        ]
+        writer.writerow(["Dividends"])
+        writer.writerow(["Date", "Account", "Security", "Type", "Amount", "Share %", "ISA Exempt"])
+        if dividends:
+            for i in dividends:
+                writer.writerow(
+                    [
+                        i.date.isoformat(),
+                        i.account_name,
+                        i.security_name,
+                        i.income_type,
+                        f"{i.amount:.2f}",
+                        str(i.share_pct),
+                        "Yes" if i.is_isa else "",
+                    ]
+                )
+            writer.writerow(["Total Dividends (excl. ISA)", f"{report.total_dividends:.2f}"])
+        else:
+            writer.writerow(["(none)"])
+        writer.writerow([])
+
+        # Interest — investment interest followed by savings interest
+        inv_interest = [
+            i
+            for i in report.investment_income
+            if i.income_type not in ("Dividend", "Reinvested Dividend")
+        ]
+        writer.writerow(["Interest"])
+        writer.writerow(["Date", "Account", "Description", "Amount", "Share %", "ISA Exempt"])
+        if inv_interest or report.savings_interest:
+            for i in inv_interest:
+                desc = f"{i.income_type}: {i.security_name}" if i.security_name else i.income_type
+                writer.writerow(
+                    [
+                        i.date.isoformat(),
+                        i.account_name,
+                        desc,
+                        f"{i.amount:.2f}",
+                        str(i.share_pct),
+                        "Yes" if i.is_isa else "",
+                    ]
+                )
+            for s in report.savings_interest:
+                writer.writerow(
+                    [
+                        s.date.isoformat(),
+                        s.account_name,
+                        s.payee or "Savings Interest",
+                        f"{s.amount:.2f}",
+                        str(s.share_pct),
+                        "Yes" if s.is_isa else "",
+                    ]
+                )
+            writer.writerow(["Total Interest (excl. ISA)", f"{report.total_interest:.2f}"])
+        else:
+            writer.writerow(["(none)"])
+        writer.writerow([])
+
+        # Other income
+        writer.writerow(["Other Income"])
+        writer.writerow(["Date", "Account", "Payee", "Category", "Amount", "Share %"])
+        if report.other_income:
+            for o in report.other_income:
+                writer.writerow(
+                    [
+                        o.date.isoformat(),
+                        o.account_name,
+                        o.payee,
+                        o.category_name,
+                        f"{o.amount:.2f}",
+                        str(o.share_pct),
+                    ]
+                )
+            writer.writerow(["Total Other Income", f"{report.total_other_income:.2f}"])
         else:
             writer.writerow(["(none)"])
 

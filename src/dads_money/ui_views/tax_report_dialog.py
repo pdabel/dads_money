@@ -28,6 +28,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..io_csv import UKTaxReportCSVWriter
 from ..models import Account, AccountType, SavingsAccountType, UKTaxReport
 from ..services import MoneyService
 from ..settings import Settings
@@ -492,6 +493,10 @@ class TaxReportDialog(QDialog):
         self._export_text_btn.clicked.connect(self._export_text)
         opt_layout.addWidget(self._export_text_btn)
 
+        self._export_csv_btn = QPushButton("Export to CSV…")
+        self._export_csv_btn.clicked.connect(self._export_csv)
+        opt_layout.addWidget(self._export_csv_btn)
+
         self._print_preview_btn = QPushButton("Print Preview…")
         self._print_preview_btn.clicked.connect(self._print_preview)
         opt_layout.addWidget(self._print_preview_btn)
@@ -573,6 +578,7 @@ class TaxReportDialog(QDialog):
     def _set_report_actions_enabled(self, enabled: bool) -> None:
         """Enable or disable the export/print buttons that need a report."""
         self._export_text_btn.setEnabled(enabled)
+        self._export_csv_btn.setEnabled(enabled)
         self._print_preview_btn.setEnabled(enabled)
         self._print_btn.setEnabled(enabled)
 
@@ -666,6 +672,27 @@ class TaxReportDialog(QDialog):
         try:
             text = _render_report_as_text(self._report, self.settings)
             Path(file_path).write_text(text, encoding="utf-8")
+            QMessageBox.information(self, "Exported", f"Report saved to:\n{file_path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Error", f"Failed to save report:\n{exc}")
+
+    def _export_csv(self) -> None:
+        """Export the current report as an Excel-friendly CSV file."""
+        if self._report is None:
+            QMessageBox.information(self, "No Report", "Please generate a report first.")
+            return
+
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Tax Report as CSV",
+            str(Path.home() / f"tax_report_{self._report.tax_year_label.replace('/', '-')}.csv"),
+            "CSV Files (*.csv);;All Files (*.*)",
+        )
+        if not file_path:
+            return
+
+        try:
+            UKTaxReportCSVWriter.write_file(file_path, self._report)
             QMessageBox.information(self, "Exported", f"Report saved to:\n{file_path}")
         except Exception as exc:
             QMessageBox.critical(self, "Error", f"Failed to save report:\n{exc}")

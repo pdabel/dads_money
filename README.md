@@ -93,7 +93,7 @@ dads-money
 - **Export to:**
   - **QIF format**: Compatible with Money, Quicken, and other financial software
   - **CSV format**: For spreadsheets and analysis
-  - **Account Summary report → CSV**: Excel-friendly export (plain numbers without currency symbols, ISO dates, UTF-8 with BOM)
+  - **Account Summary & UK Tax reports → CSV**: Excel-friendly exports (plain numbers without currency symbols, ISO dates, UTF-8 with BOM)
 
 ### Data Storage
 - SQLite database for reliable, portable storage
