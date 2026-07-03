@@ -62,7 +62,7 @@ src/dads_money/
 ├── storage.py          # SQLite persistence layer
 ├── services.py         # Business logic orchestration
 ├── io_qif.py           # QIF import/export
-├── io_csv.py           # CSV import/export
+├── io_csv.py           # CSV import/export (incl. account summary report export)
 ├── io_ofx.py           # OFX import
 ├── config.py           # Configuration and paths
 ├── settings.py         # User preferences
@@ -72,6 +72,8 @@ src/dads_money/
     ├── account_dialogs.py  # AccountDialog, TransactionDialog
     ├── manage_dialogs.py   # CategoryDialog, PayeeDialog
     ├── settings_dialog.py  # SettingsDialog
+    ├── account_summary_dialog.py # Account Summary report (text/CSV export, print)
+    ├── tax_report_dialog.py # UK tax year report
     ├── investment_panel.py # InvestmentPanel
     └── investment_dialogs.py # Investment-related dialogs & worker thread
 ```
@@ -108,7 +110,7 @@ python demo.py
 - `src/dads_money/storage.py` - SQLite database layer
 - `src/dads_money/services.py` - Business logic orchestration
 - `src/dads_money/io_qif.py` - QIF parser/writer
-- `src/dads_money/io_csv.py` - CSV parser/writer
+- `src/dads_money/io_csv.py` - CSV parser/writer, incl. AccountSummaryCSVWriter (Excel-friendly report export)
 - `src/dads_money/io_ofx.py` - OFX parser
 - `src/dads_money/config.py` - Configuration and paths
 - `src/dads_money/settings.py` - User preferences (currency, date format)

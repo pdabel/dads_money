@@ -39,6 +39,7 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
+from ..io_csv import AccountSummaryCSVWriter
 from ..models import AccountSummaryReport, Account, AccountType, SavingsAccountType
 from ..services import MoneyService
 from ..settings import Settings
@@ -427,6 +428,9 @@ class AccountSummaryDialog(QDialog):
         export_btn = QPushButton("Export to Text…")
         export_btn.clicked.connect(self._export_text)
         btn_row.addWidget(export_btn)
+        export_csv_btn = QPushButton("Export to CSV…")
+        export_csv_btn.clicked.connect(self._export_csv)
+        btn_row.addWidget(export_csv_btn)
         print_preview_btn = QPushButton("Print Preview…")
         print_preview_btn.clicked.connect(self._print_preview)
         btn_row.addWidget(print_preview_btn)
@@ -567,6 +571,28 @@ class AccountSummaryDialog(QDialog):
         try:
             text = _render_report_as_text(self._report, self.settings)
             Path(file_path).write_text(text, encoding="utf-8")
+            QMessageBox.information(self, "Exported", f"Report saved to:\n{file_path}")
+        except Exception as exc:
+            QMessageBox.critical(self, "Error", f"Failed to save report:\n{exc}")
+
+    def _export_csv(self) -> None:
+        """Export the current report as an Excel-friendly CSV file."""
+        if self._report is None:
+            QMessageBox.information(self, "No Report", "Please generate a report first.")
+            return
+
+        safe_period = self._report.period_label.replace(" – ", "_to_").replace(" ", "-")
+        file_path, _ = QFileDialog.getSaveFileName(
+            self,
+            "Save Account Summary Report as CSV",
+            str(Path.home() / f"account_summary_{safe_period}.csv"),
+            "CSV Files (*.csv);;All Files (*.*)",
+        )
+        if not file_path:
+            return
+
+        try:
+            AccountSummaryCSVWriter.write_file(file_path, self._report)
             QMessageBox.information(self, "Exported", f"Report saved to:\n{file_path}")
         except Exception as exc:
             QMessageBox.critical(self, "Error", f"Failed to save report:\n{exc}")

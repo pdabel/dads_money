@@ -6,7 +6,12 @@ from decimal import Decimal
 from typing import Dict, List, Optional, TextIO
 
 from .io_qif import InvestmentImportRecord, _map_qif_action
-from .models import InvestmentTransaction, Transaction, TransactionStatus
+from .models import (
+    AccountSummaryReport,
+    InvestmentTransaction,
+    Transaction,
+    TransactionStatus,
+)
 
 
 class CSVParser:
@@ -224,6 +229,113 @@ class InvestmentCSVWriter:
                     ),
                 }
             )
+
+
+class AccountSummaryCSVWriter:
+    """Write an AccountSummaryReport as an Excel-friendly CSV file.
+
+    Amounts are written as plain numbers (no currency symbols or thousands
+    separators) so Excel treats them as numeric, dates use ISO YYYY-MM-DD
+    format, and files are encoded as UTF-8 with a BOM so Excel decodes
+    non-ASCII names correctly.
+    """
+
+    _OVERVIEW_HEADER: List[str] = [
+        "Account",
+        "Type",
+        "Opening Balance",
+        "Credits",
+        "Debits",
+        "Net Change",
+        "Closing Balance",
+        "Transactions",
+    ]
+
+    @staticmethod
+    def write_file(file_path: str, report: AccountSummaryReport) -> None:
+        """Write an account summary report to a CSV file.
+
+        Args:
+            file_path: Destination file path.
+            report: The report to export.
+        """
+        with open(file_path, "w", encoding="utf-8-sig", newline="") as f:
+            AccountSummaryCSVWriter.write(f, report)
+
+    @staticmethod
+    def write(file: TextIO, report: AccountSummaryReport) -> None:
+        """Write an account summary report to CSV format.
+
+        Args:
+            file: Writable text file object.
+            report: The report to export.
+        """
+        writer = csv.writer(file)
+
+        writer.writerow(["Account Summary Report"])
+        writer.writerow(["Period Start", report.start_date.isoformat()])
+        writer.writerow(["Period End", report.end_date.isoformat()])
+        writer.writerow(["Generated", date.today().isoformat()])
+        writer.writerow([])
+
+        # Overview — one row per account plus totals
+        writer.writerow(AccountSummaryCSVWriter._OVERVIEW_HEADER)
+        for entry in report.entries:
+            writer.writerow(
+                [
+                    entry.account_name,
+                    entry.account_type,
+                    f"{entry.opening_balance:.2f}",
+                    f"{entry.total_credits:.2f}",
+                    f"{entry.total_debits:.2f}",
+                    f"{entry.net_change:.2f}",
+                    f"{entry.closing_balance:.2f}",
+                    str(entry.transaction_count),
+                ]
+            )
+        writer.writerow(
+            [
+                "TOTALS",
+                "",
+                "",
+                f"{report.total_credits:.2f}",
+                f"{report.total_debits:.2f}",
+                f"{report.net_change:.2f}",
+                "",
+                str(sum(e.transaction_count for e in report.entries)),
+            ]
+        )
+        writer.writerow([])
+
+        # Category breakdown — aggregated across all accounts
+        cat_totals: Dict[str, Decimal] = {}
+        for entry in report.entries:
+            for row in entry.category_breakdown:
+                cat_totals[row.category_name] = (
+                    cat_totals.get(row.category_name, Decimal("0")) + row.amount
+                )
+
+        income = [(k, v) for k, v in sorted(cat_totals.items()) if v > Decimal("0")]
+        expenses = [(k, abs(v)) for k, v in sorted(cat_totals.items()) if v < Decimal("0")]
+
+        writer.writerow(["Income by Category"])
+        writer.writerow(["Category", "Amount"])
+        if income:
+            for cat, amount in income:
+                writer.writerow([cat, f"{amount:.2f}"])
+            writer.writerow(["Total Income", f"{sum(v for _, v in income):.2f}"])
+        else:
+            writer.writerow(["(none)"])
+        writer.writerow([])
+
+        writer.writerow(["Expenses by Category"])
+        writer.writerow(["Category", "Amount"])
+        if expenses:
+            for cat, amount in expenses:
+                writer.writerow([cat, f"{amount:.2f}"])
+            writer.writerow(["Total Expenses", f"{sum(v for _, v in expenses):.2f}"])
+        else:
+            writer.writerow(["(none)"])
 
 
 # ---------------------------------------------------------------------------
