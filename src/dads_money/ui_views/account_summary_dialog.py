@@ -425,18 +425,19 @@ class AccountSummaryDialog(QDialog):
         generate_btn.setDefault(True)
         btn_row.addWidget(generate_btn)
         btn_row.addStretch()
-        export_btn = QPushButton("Export to Text…")
-        export_btn.clicked.connect(self._export_text)
-        btn_row.addWidget(export_btn)
-        export_csv_btn = QPushButton("Export to CSV…")
-        export_csv_btn.clicked.connect(self._export_csv)
-        btn_row.addWidget(export_csv_btn)
-        print_preview_btn = QPushButton("Print Preview…")
-        print_preview_btn.clicked.connect(self._print_preview)
-        btn_row.addWidget(print_preview_btn)
-        print_btn = QPushButton("Print…")
-        print_btn.clicked.connect(self._print_report)
-        btn_row.addWidget(print_btn)
+        self._export_text_btn = QPushButton("Export to Text…")
+        self._export_text_btn.clicked.connect(self._export_text)
+        btn_row.addWidget(self._export_text_btn)
+        self._export_csv_btn = QPushButton("Export to CSV…")
+        self._export_csv_btn.clicked.connect(self._export_csv)
+        btn_row.addWidget(self._export_csv_btn)
+        self._print_preview_btn = QPushButton("Print Preview…")
+        self._print_preview_btn.clicked.connect(self._print_preview)
+        btn_row.addWidget(self._print_preview_btn)
+        self._print_btn = QPushButton("Print…")
+        self._print_btn.clicked.connect(self._print_report)
+        btn_row.addWidget(self._print_btn)
+        self._set_report_actions_enabled(False)
 
         outer.addWidget(period_box)
         outer.addLayout(btn_row)
@@ -478,6 +479,13 @@ class AccountSummaryDialog(QDialog):
     # Actions
     # ----------------------------------------------------------------
 
+    def _set_report_actions_enabled(self, enabled: bool) -> None:
+        """Enable or disable the export/print buttons that need a report."""
+        self._export_text_btn.setEnabled(enabled)
+        self._export_csv_btn.setEnabled(enabled)
+        self._print_preview_btn.setEnabled(enabled)
+        self._print_btn.setEnabled(enabled)
+
     def _resolve_dates(self) -> tuple:
         """Return (start_date, end_date) based on current period selection."""
         if self._rb_tax_year.isChecked():
@@ -511,6 +519,7 @@ class AccountSummaryDialog(QDialog):
 
         self._report = report
         self._show_results(report)
+        self._set_report_actions_enabled(True)
 
     def _show_results(self, report: AccountSummaryReport) -> None:
         layout = self._results_container.layout()

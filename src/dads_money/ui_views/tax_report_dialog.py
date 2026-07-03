@@ -488,17 +488,19 @@ class TaxReportDialog(QDialog):
         generate_btn.setDefault(True)
         opt_layout.addWidget(generate_btn)
 
-        export_btn = QPushButton("Export to Text…")
-        export_btn.clicked.connect(self._export_text)
-        opt_layout.addWidget(export_btn)
+        self._export_text_btn = QPushButton("Export to Text…")
+        self._export_text_btn.clicked.connect(self._export_text)
+        opt_layout.addWidget(self._export_text_btn)
 
-        print_preview_btn = QPushButton("Print Preview…")
-        print_preview_btn.clicked.connect(self._print_preview)
-        opt_layout.addWidget(print_preview_btn)
+        self._print_preview_btn = QPushButton("Print Preview…")
+        self._print_preview_btn.clicked.connect(self._print_preview)
+        opt_layout.addWidget(self._print_preview_btn)
 
-        print_btn = QPushButton("Print…")
-        print_btn.clicked.connect(self._print_report)
-        opt_layout.addWidget(print_btn)
+        self._print_btn = QPushButton("Print…")
+        self._print_btn.clicked.connect(self._print_report)
+        opt_layout.addWidget(self._print_btn)
+
+        self._set_report_actions_enabled(False)
 
         options_box.setLayout(opt_layout)
         outer.addWidget(options_box)
@@ -568,6 +570,12 @@ class TaxReportDialog(QDialog):
     # Actions
     # ----------------------------------------------------------------
 
+    def _set_report_actions_enabled(self, enabled: bool) -> None:
+        """Enable or disable the export/print buttons that need a report."""
+        self._export_text_btn.setEnabled(enabled)
+        self._print_preview_btn.setEnabled(enabled)
+        self._print_btn.setEnabled(enabled)
+
     def _on_owner_filter_changed(self) -> None:
         owner = self._owner_combo.currentData() or ""
         self._account_selector.select_for_owner(owner)
@@ -594,6 +602,7 @@ class TaxReportDialog(QDialog):
 
         self._report = report
         self._show_results(report)
+        self._set_report_actions_enabled(True)
 
     def _show_results(self, report: UKTaxReport) -> None:
         """Replace the results container contents with the rendered report."""
